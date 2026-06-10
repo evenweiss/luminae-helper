@@ -1,6 +1,6 @@
 {
   "name": "luminae-helper",
-  "version": "0.0.12",
+  "version": "0.0.14",
   "description": "Install public AI agent skills to coding tools",
   "type": "module",
   "main": "src/index.js",
