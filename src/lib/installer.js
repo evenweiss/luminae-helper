@@ -60,7 +60,7 @@ function copyFile(src, dest) {
 }
 
 /** 目录名黑名单：复制 skill 目录时跳过这些条目，避免污染用户 home */
-const COPY_SKIP_ENTRIES = new Set(["node_modules", ".git", ".DS_Store", "Thumbs.db"]);
+const COPY_SKIP_ENTRIES = new Set(["node_modules", ".git", ".DS_Store", "Thumbs.db", "README.md"]);
 
 function copyDir(src, dest) {
   if (!existsSync(src)) throw new Error(`Source dir not found: ${src}`);
