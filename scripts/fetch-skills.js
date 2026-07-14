@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 const strict = process.argv.includes("--strict");
 const scriptDir = import.meta.dirname;
 const packageRoot = join(scriptDir, "..");
-const sourceRepo = process.env.LUMINAE_SKILLS_SOURCE || join(packageRoot, "..", "ai-agent-skills");
-const remote = process.env.LUMINAE_SKILLS_REPO || "https://github.com/evenweiss/ai-agent-skills.git";
+const sourceRepo = process.env.LUMINAE_SKILLS_SOURCE || join(packageRoot, "..", "ai-skills");
+const remote = process.env.LUMINAE_SKILLS_REPO || "https://github.com/evenweiss/ai-skills.git";
 const copyDirs = ["commands", "skills"];
 const skip = new Set(["node_modules", ".git", ".DS_Store", "Thumbs.db"]);
 
