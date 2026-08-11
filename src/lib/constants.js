@@ -46,23 +46,11 @@ export const TOOLS = [
     skillDir: () => join(homedir(), ".opencode", "skills"),
     installHint: "npm install -g opencode-ai",
   },
-  {
-    id: "trae",
-    name: "Trae",
-    command: "trae",
-    commandDir: () => join(homedir(), ".trae", "commands"),
-    skillDir: null,
-    installHint: "Download from https://trae.ai",
-  },
 ];
 
 // ── Skill auto-discovery ──
 
-/**
- * Get the package root directory.
- * import.meta.dirname = <luminae-helper>/src/lib
- * Package root = <luminae-helper>/
- */
+/** ...same as before... */
 function getPackageDir() {
   if (globalThis.__LUMINAE_PACKAGE_ROOT__) {
     return globalThis.__LUMINAE_PACKAGE_ROOT__;
@@ -78,10 +66,6 @@ function getPackageDir() {
   return selfDir;
 }
 
-/**
- * Parse YAML frontmatter from SKILL.md content.
- * Only extracts `name` and `description`.
- */
 function parseSkillMeta(skillId, content) {
   let name = null;
   let description = null;
@@ -92,14 +76,11 @@ function parseSkillMeta(skillId, content) {
       const m = line.match(/^(\w+):\s*(.+)/);
       if (m) {
         let value = m[2].trim();
-        // Strip YAML inline comments (unquoted # after value)
-        // But preserve # inside quoted strings
         if (!((value.startsWith('"') && value.endsWith('"')) ||
               (value.startsWith("'") && value.endsWith("'")))) {
           const hashIdx = value.indexOf(" #");
           if (hashIdx !== -1) value = value.slice(0, hashIdx).trim();
         }
-        // Strip surrounding quotes (single or double) from YAML values
         if ((value.startsWith('"') && value.endsWith('"')) ||
             (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
@@ -110,13 +91,11 @@ function parseSkillMeta(skillId, content) {
     }
   }
 
-  // Default name: skillId, capitalize words separated by hyphens
   if (!name) {
     name = skillId
       .replace(/(^|-)(\w)/g, (_, p, c) => (p === "-" ? " " : "") + c.toUpperCase());
   }
 
-  // Default description: first blockquote line
   if (!description) {
     const bq = content.match(/^>\s*(.+)/m);
     if (bq) description = bq[1].trim();
@@ -125,14 +104,6 @@ function parseSkillMeta(skillId, content) {
   return { name, description };
 }
 
-/**
- * Generate installTargets for an entry based on tool capability.
- * - skillType "command" + tool supports commandDir → file mode (commands/)
- * - skillType "command" + tool only supports skillDir → fallback dir mode
- * - skillType "skill"   + tool supports skillDir   → dir mode (skills/)
- * - skillType "skill"   + tool only supports commandDir → fallback file mode
- * - tool supports neither → skip
- */
 function generateInstallTargets(skillId, skillType) {
   const targets = [];
   for (const tool of TOOLS) {
@@ -148,7 +119,6 @@ function generateInstallTargets(skillId, skillType) {
           destPath: () => join(tool.commandDir(), `${skillId}.md`),
         });
       } else if (supportsSkill) {
-        // Fallback: tool only supports skills, install command as skill
         targets.push({
           toolId: tool.id,
           installMode: "dir",
@@ -165,7 +135,6 @@ function generateInstallTargets(skillId, skillType) {
           destPath: () => join(tool.skillDir(), skillId),
         });
       } else if (supportsCommand) {
-        // Fallback: tool only supports commands, install skill as command
         targets.push({
           toolId: tool.id,
           installMode: "file",
@@ -178,12 +147,6 @@ function generateInstallTargets(skillId, skillType) {
   return targets;
 }
 
-/**
- * Scan commands/ and skills/ directories and build SKILLS array automatically.
- * Each subdirectory containing a SKILL.md is a valid skill.
- * - commands/<skillId>/ → type: "command"
- * - skills/<skillId>/   → type: "skill"
- */
 export function discoverSkills() {
   const packageDir = getPackageDir();
   const skills = [];
@@ -232,11 +195,6 @@ export function discoverSkills() {
 
 export const SKILLS = discoverSkills();
 
-// ── Helpers ──
-
-/**
- * Detect which tools are installed on this machine.
- */
 export function detectInstalledTools() {
   return TOOLS.map((tool) => ({
     ...tool,
@@ -244,11 +202,6 @@ export function detectInstalledTools() {
   }));
 }
 
-/**
- * Find skill source directory bundled inside this package.
- * - command: <luminae-helper>/commands/<skillId>/
- * - skill:   <luminae-helper>/skills/<skillId>/
- */
 export function getSkillSourcePath(skillId) {
   const skill = SKILLS.find(s => s.id === skillId);
   if (!skill) {
