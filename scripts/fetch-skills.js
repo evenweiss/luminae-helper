@@ -32,13 +32,14 @@ function copyDir(from, to) {
 }
 
 function resolveSource() {
-  if (copyDirs.some(d => hasSkillTree(join(sourceRepo, d)))) return sourceRepo;
+  // 优先拉取远端，失败时兜底用本地目录
   const tmp = mkdtempSync(join(tmpdir(), "luminae-skills-"));
   try {
     execFileSync("git", ["clone", "--depth", "1", remote, tmp], { stdio: "inherit" });
     return tmp;
   } catch (e) {
     rmSync(tmp, { recursive: true, force: true });
+    if (copyDirs.some(d => hasSkillTree(join(sourceRepo, d)))) return sourceRepo;
     if (strict) throw e;
     return null;
   }
