@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- git-push 重写为授权边界版：新增 UI 改动提交前截图自检规则。
+
 ## 0.0.12
 
 - Split the public CLI engine into its own `luminae-helper` repository.
