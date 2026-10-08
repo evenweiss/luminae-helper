@@ -66,7 +66,8 @@ describe("constants.js", () => {
     it("skill with YAML frontmatter should parse name and description", () => {
       const identity = SKILLS.find(s => s.id === "identity");
       expect(identity).toBeDefined();
-      expect(identity.name).toBe("Identity");
+      // frontmatter 中的 name 优先于 skillId 推导
+      expect(identity.name).toBe("identity");
     });
 
     it("installTargets destPath should be a function returning a string", () => {
@@ -80,7 +81,7 @@ describe("constants.js", () => {
 
     it("file mode destPath ends with .md", () => {
       const skill = SKILLS.find(s => s.id === "git-push");
-      const target = skill.installTargets.find(t => t.toolId === "trae");
+      const target = skill.installTargets.find(t => t.toolId === "claude-code");
       const path = target.destPath();
       expect(path.endsWith(".md")).toBe(true);
     });
@@ -93,31 +94,22 @@ describe("constants.js", () => {
       expect(path.endsWith(skill.id)).toBe(true);
     });
 
-    it("routes command entries to command-only tools as command files", () => {
-      const command = SKILLS.find(s => s.id === "identity");
-      const commandTarget = command.installTargets.find(t => t.toolId === "trae");
-
-      expect(commandTarget.installMode).toBe("file");
-      expect(commandTarget.conversion).toBeNull();
-      expect(commandTarget.destPath()).toMatch(/[\\/]identity\.md$/);
-    });
-
     it("routes command entries to skill-only tools as fallback skill directories", () => {
-      const command = SKILLS.find(s => s.id === "identity");
+      const command = SKILLS.find(s => s.id === "git-push");
       const target = command.installTargets.find(t => t.toolId === "hermes-agent");
 
       expect(target.installMode).toBe("dir");
       expect(target.conversion).toBe("command-to-skill");
-      expect(target.destPath()).toMatch(/[\\/]identity$/);
+      expect(target.destPath()).toMatch(/[\\/]git-push$/);
     });
 
     it("routes command entries to commandDir for tools that support commands", () => {
-      const command = SKILLS.find(s => s.id === "identity");
+      const command = SKILLS.find(s => s.id === "git-push");
       const commandTarget = command.installTargets.find(t => t.toolId === "claude-code");
 
       expect(commandTarget.installMode).toBe("file");
       expect(commandTarget.conversion).toBeNull();
-      expect(commandTarget.destPath()).toMatch(/[\\/]commands[\\/]identity\.md$/);
+      expect(commandTarget.destPath()).toMatch(/[\\/]commands[\\/]git-push\.md$/);
     });
   });
 
@@ -132,9 +124,9 @@ describe("constants.js", () => {
   });
 
   describe("getSkillSourcePath", () => {
-    it("returns a path ending with commands/<skillId> for command entries", () => {
+    it("returns a path ending with skills/<skillId> for skill entries", () => {
       const path = getSkillSourcePath("identity");
-      expect(path).toMatch(/commands\/identity$/);
+      expect(path).toMatch(/skills\/identity$/);
     });
 
     it("returns a path ending with commands/<skillId> for another command entry", () => {
@@ -225,10 +217,10 @@ describe("installer.js", () => {
 
       const destContent = readFileSync(destPath, "utf-8");
       const srcContent = readFileSync(srcPath, "utf-8");
-      // 安装后的文件包含 managed-by 标识
+      // 安装后的文件包含 managed-by 标识（注入进已有 frontmatter）
       expect(destContent).toContain("managed-by: luminae-helper");
-      // 除标识 frontmatter 外内容与源一致
-      expect(destContent.replace(/^---\nmanaged-by: luminae-helper\n---\n/, "")).toBe(srcContent);
+      // 移除标识行后与源一致
+      expect(destContent.replace("managed-by: luminae-helper\n", "")).toBe(srcContent);
 
       rmSync(tmpDir, { recursive: true, force: true });
     });
