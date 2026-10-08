@@ -77,16 +77,17 @@ describe("parseCheckboxResult", () => {
 
 describe("collectConversionFallbacks", () => {
   it("collects command-to-skill fallbacks per skill-only tool", () => {
+    // identity 是 skill（原生目录安装，无转换），git-push 是 command（需转换）
     const result = collectConversionFallbacks(["identity", "git-push"], ["hermes-agent"]);
 
     expect(result.has("hermes-agent")).toBe(true);
     const hermes = result.get("hermes-agent");
     expect(hermes.tool.name).toBe("Hermes Agent");
-    expect(hermes.items.map(item => item.skill.id)).toEqual(["identity", "git-push"]);
+    expect(hermes.items.map(item => item.skill.id)).toEqual(["git-push"]);
     expect(hermes.items[0].target.conversion).toBe("command-to-skill");
   });
 
-  it("does not collect fallback for command entries on command-only tools", () => {
+  it("returns empty for unknown tool ids", () => {
     const result = collectConversionFallbacks(["identity", "git-push"], ["trae"]);
     expect(result.size).toBe(0);
   });
