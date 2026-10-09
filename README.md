@@ -159,7 +159,7 @@ luminae-helper/
 
 ## Library API
 
-可作为 npm 包引入，自定义包装器（如 `kfz-skills-helper`）复用 CLI 引擎：
+可作为 npm 包引入，自定义包装器复用 CLI 引擎：
 
 ```js
 import { runCli } from "luminae-helper";
@@ -171,4 +171,4 @@ const code = await runCli({
 process.exit(code);
 ```
 
-`packageRoot` 让包装器提供自己的 `commands/` 和 `skills/`，复用相同的交互式安装引擎。参见 [kfz-skills-helper](https://github.com/evenweiss/kfz-skills-helper)。
+`packageRoot` 让包装器提供自己的 `commands/` 和 `skills/`，复用相同的交互式安装引擎。
