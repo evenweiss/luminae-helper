@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- 新增 git-flow skill：Git Flow feature/release/hotfix 分支的创建、检出与 finish 流程。
+
 ## 1.0.4
 
 - git-push：截图自检改为条件触发——渲染结果可静态确认或项目需登录态/启动成本高时跳过，审查结论注明「未经渲染验证」。
