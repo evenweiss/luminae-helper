@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- 新增 ai-development-workflow skill：按任务规模组织 AI 辅助开发协作，维护版本基线、环境受限验证与阶段验收交接。
+- README 技能表补齐 git-flow 与新技能条目。
+
 ## 1.0.5
 
 - 新增 git-flow skill：Git Flow feature/release/hotfix 分支的创建、检出与 finish 流程。
