@@ -61,6 +61,8 @@ luminae-helper outdated     # 检查 npm registry 是否有新版本
 
 | 技能 | 用途 |
 |------|------|
+| `ai-development-workflow` | 按任务规模组织 AI 辅助开发协作，维护版本基线、环境受限验证及阶段验收与交接 |
+| `git-flow` | Git Flow feature / release / hotfix 分支的创建、检出与 finish，版本号自动计算 |
 | `identity` | 检测项目类型，自动设定 agent 身份（前端/后端/全栈等） |
 
 ## 支持的工具
