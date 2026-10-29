@@ -73,6 +73,8 @@ function copyDir(src, dest) {
   const entries = readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
     if (COPY_SKIP_ENTRIES.has(entry.name)) continue;
+    // 软链一律跳过：跟随复制会把包外文件内容带进工具目录
+    if (entry.isSymbolicLink()) continue;
     const srcPath = join(src, entry.name);
     const destPath = join(tmpDest, entry.name);
     if (entry.isDirectory()) {
@@ -162,6 +164,11 @@ export function installSkillToTool(skill, tool) {
 
   const destPath = target.destPath();
   const isDirBased = target.installMode === "dir";
+
+  // 目标已存在但不是本工具装的（缺 managed-by）→ 跳过，不覆盖用户自建内容
+  if (existsSync(destPath) && !isInstalledByUs(destPath, isDirBased)) {
+    return { success: false, skipped: true, message: `目标已存在且非本工具安装，已跳过: ${destPath}` };
+  }
 
   if (isDirBased) {
     try {

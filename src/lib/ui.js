@@ -460,6 +460,17 @@ async function stepExecute(skillIds, toolIds, installedTools, isUninstall, faile
             status: chalk.green("已安装"),
             mode: installModeDescription(target),
           });
+        } else if (result.skipped) {
+          resultRows.push({
+            key,
+            toolName: tool.name,
+            skillName: skill.name,
+            status: chalk.yellow("已跳过"),
+            mode: result.message,
+          });
+          allSuccess = false;
+          // 目标被非本工具内容占用，重试也不会变
+          permanentFailedKeys.add(key);
         } else {
           resultRows.push({
             key,
