@@ -248,6 +248,7 @@ async function stepSelectSkills() {
     const skillChoices = SKILLS.map(s => ({
       name: s.name + "  -  " + s.description,
       value: s.id,
+      checked: true,
     }));
 
     const theme = {
