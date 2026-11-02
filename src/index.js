@@ -16,16 +16,23 @@ export async function runCli(options = {}) {
     return 0;
   }
 
-  const { runInteractive, TERM_GUTTER } = await import("./lib/ui.js");
+  const { runInteractive, runOperation, TERM_GUTTER } = await import("./lib/ui.js");
   try {
-    await runInteractive();
+    if (options.operation) await runOperation(options.operation);
+    else await runInteractive();
     return 0;
   } catch (error) {
     if (error?.name === "ExitPromptError") {
-      console.log("\n" + TERM_GUTTER + "👋 Bye!\n");
+      if (!options.operation) console.log("\n" + TERM_GUTTER + "👋 Bye!\n");
       return 0;
     }
     console.error("\n" + TERM_GUTTER + "Error:", error.message ?? String(error));
     return 1;
   }
+}
+
+/** Execute one shared public-skill flow, then return control to a wrapper. */
+export async function runSkillOperation(action, options = {}) {
+  if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
+  return runCli({ ...options, argv: [], operation: action });
 }

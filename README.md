@@ -165,3 +165,15 @@ process.exit(code);
 `packageRoot` 用于包装器名称、版本和 registry 查询；公共技能统一使用运行时仓库缓存。
 
 迁移注意：`packageRoot` 不再作为公共技能分发源，包装器无需打包自己的 `commands/`、`skills/` 或执行同步钩子。已安装技能的管理标识保持兼容。
+
+
+包装器需要自行组织主菜单时，复用单次操作入口：
+
+```js
+import { runSkillOperation } from "luminae-helper";
+
+const code = await runSkillOperation("install", { packageRoot: wrapperRoot });
+// 或 runSkillOperation("uninstall", { packageRoot: wrapperRoot })
+```
+
+只接受 `install` / `uninstall`，非法操作会拒绝。入口不展示引擎自己的主菜单，完成或取消后返回控制权；嵌入流程的操作结束提示为返回主菜单。操作异常返回 `1`，正常或取消返回 `0`。缓存、覆盖保护、复制安装、离线卸载和快照占用释放继续由共享实现负责。独立运行 `luminae-helper` 仍使用原菜单，`runCli()` 的版本命令保持不变。
