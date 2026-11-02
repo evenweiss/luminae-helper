@@ -171,7 +171,7 @@ function mergeResultRows(...rowGroups) {
 }
 
 // ── Step 3: Fallback conversion confirm（每个目标工具单独确认）──
-async function stepConfirmConversionFallbacks(skillIds, toolIds) {
+async function stepConfirmConversionFallbacks(skillIds, toolIds, embedded = false) {
   const fallbacks = collectConversionFallbacks(skillIds, toolIds);
   const skippedKeys = new Set();
 
@@ -195,7 +195,7 @@ async function stepConfirmConversionFallbacks(skillIds, toolIds) {
           { name: "✓ 允许转换并安装", value: "allow" },
           { name: "- 跳过该工具的这些转换项", value: "skip" },
           { name: "↩ 返回上一步", value: "back" },
-          { name: "✕ 退出", value: "exit" },
+          { name: embedded ? "↩ 返回主菜单" : "✕ 退出", value: "exit" },
         ],
         theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
       },
@@ -219,12 +219,12 @@ async function stepConfirmConversionFallbacks(skillIds, toolIds) {
  * @param {{ name: string, value: string }[]} items
  * @param {string} backLabel
  */
-function withNavChoices(items, backLabel) {
+function withNavChoices(items, backLabel, exitLabel = "✕ 退出") {
   return [
     ...items,
     new Separator(),
     { name: chalk.yellow(backLabel), value: "__back__" },
-    { name: "✕ 退出", value: "__exit__" },
+    ...(exitLabel ? [{ name: exitLabel, value: "__exit__" }] : []),
   ];
 }
 
@@ -243,7 +243,7 @@ async function runCheckbox(config) {
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills() {
+async function stepSelectSkills(embedded = false) {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -262,7 +262,7 @@ async function stepSelectSkills() {
 
     const ans = await runCheckbox({
       message: "选择命令/技能:",
-      choices: withNavChoices(skillChoices, "↩ 返回主菜单"),
+      choices: withNavChoices(skillChoices, "↩ 返回主菜单", embedded ? null : "✕ 退出"),
       loop: false,
       theme,
     });
@@ -283,7 +283,7 @@ async function stepSelectSkills() {
 }
 
 // ── Step 2: Select tools (checkbox multi-select) ──
-async function stepSelectTools(installedTools) {
+async function stepSelectTools(installedTools, embedded = false) {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -302,7 +302,7 @@ async function stepSelectTools(installedTools) {
     // 第二步：底部为返回/退出功能行（移上后回车触发）
     const ans = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(toolChoices, "↩ 返回上一步"),
+      choices: withNavChoices(toolChoices, "↩ 返回上一步", embedded ? "↩ 返回主菜单" : "✕ 退出"),
       loop: false,
       theme,
     });
@@ -333,7 +333,7 @@ function asIdArray(v) {
 }
 
 // ── Step 3: Preview + Confirm（仅标题 + 确认菜单；不再展示 Skill/工具明细）──
-async function stepPreviewConfirm(isUninstall) {
+async function stepPreviewConfirm(isUninstall, embedded = false) {
   await afterPromptFlush();
   printBanner();
   const actionLabel = isUninstall ? "卸载" : "安装";
@@ -346,7 +346,7 @@ async function stepPreviewConfirm(isUninstall) {
       choices: [
         { name: "✓ 确认" + actionLabel, value: "confirm" },
         { name: "↩ 返回上一步", value: "back" },
-        { name: "✕ 退出", value: "exit" },
+        { name: embedded ? "↩ 返回主菜单" : "✕ 退出", value: "exit" },
       ],
       theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
     },
@@ -505,13 +505,13 @@ async function stepExecute(skillIds, toolIds, installedTools, isUninstall, faile
 }
 
 // ── Unified flow (install / uninstall) ──
-async function runFlow(isUninstall) {
+async function runFlow(isUninstall, embedded = false) {
   let heldSource;
-  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }); }
+  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }, embedded); }
   finally { await heldSource?.release?.(); }
 }
 
-async function runFlowWithSource(isUninstall, holdSource) {
+async function runFlowWithSource(isUninstall, holdSource, embedded) {
   const installedTools = detectInstalledTools().filter(t => t.installed);
   if (installedTools.length === 0) {
     await afterPromptFlush();
@@ -578,24 +578,24 @@ async function runFlowWithSource(isUninstall, holdSource) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills();
+      const result = await stepSelectSkills(embedded);
       if (result === "back") return "back";
       if (result === "exit") return "exit";
       selectedSkillIds = result;
       step = 2;
     } else if (step === 2) {
-      const result = await stepSelectTools(installedTools);
+      const result = await stepSelectTools(installedTools, embedded);
       if (result === "back") { step = 1; continue; }
       if (result === "exit") return "exit";
       selectedToolIds = result;
       skippedConversionKeys = new Set();
       step = 3;
     } else if (step === 3) {
-      const result = await stepPreviewConfirm(isUninstall);
+      const result = await stepPreviewConfirm(isUninstall, embedded);
       if (result === "back") { step = 2; continue; }
       if (result === "exit") return "exit";
       if (!isUninstall && SHOW_CONVERSION_CONFIRM_PROMPT) {
-        const fallbackResult = await stepConfirmConversionFallbacks(selectedSkillIds, selectedToolIds);
+        const fallbackResult = await stepConfirmConversionFallbacks(selectedSkillIds, selectedToolIds, embedded);
         if (fallbackResult.action === "back") { step = 2; continue; }
         if (fallbackResult.action === "exit") return "exit";
         skippedConversionKeys = fallbackResult.skippedKeys;
@@ -607,7 +607,7 @@ async function runFlowWithSource(isUninstall, holdSource) {
         printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
         await input(
           {
-            message: "按任意键退出...",
+            message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
             theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
@@ -635,7 +635,7 @@ async function runFlowWithSource(isUninstall, holdSource) {
             printResultTable("安装结果", accumulatedResultRows);
             await input(
               {
-                message: "按任意键退出...",
+                message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
                 theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
@@ -680,6 +680,13 @@ async function runFlowWithSource(isUninstall, holdSource) {
       }
     }
   }
+}
+
+export async function runOperation(action) {
+  if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
+  await afterPromptFlush();
+  await runFlow(action === "uninstall", true);
+  await afterPromptFlush();
 }
 
 // ── Main ──

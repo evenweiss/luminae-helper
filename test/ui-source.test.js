@@ -12,7 +12,7 @@ const root = mkdtempSync(join(tmpdir(), "ui-source-"));
 process.env.HOME = join(root, "home");
 mkdirSync(join(root, "skills", "runtime"), { recursive: true });
 writeFileSync(join(root, "skills/runtime/SKILL.md"), "---\nname: runtime\ndescription: test\n---\nbody");
-const { runInteractive } = await import("../src/lib/ui.js");
+const { runInteractive, runOperation } = await import("../src/lib/ui.js");
 const { SKILLS } = await import("../src/lib/constants.js");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
@@ -61,4 +61,28 @@ it("releases a cache lease when the user declines it", async () => {
   source.acquireCachedSource.mockResolvedValue({ root, tag: "0.2.0", commit: "old", release });
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("back").mockResolvedValueOnce("exit");
   await runInteractive(); expect(release).toHaveBeenCalledExactlyOnceWith();
+});
+
+it("single operation goes directly to skill selection, cancels back and releases the lease", async () => {
+  const release = vi.fn().mockResolvedValue(undefined);
+  source.refreshPublicSource.mockResolvedValue({ root, tag: "0.3.0", commit: "abc", release });
+  await runOperation("install");
+  expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
+  expect(prompts.select).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+it("single uninstall remains offline", async () => {
+  await runOperation("uninstall");
+  expect(source.refreshPublicSource).not.toHaveBeenCalled();
+  expect(source.acquireCachedSource).not.toHaveBeenCalled();
+});
+it("single install completion releases its lease and labels the return to the wrapper menu", async () => {
+  const release = vi.fn().mockResolvedValue(undefined);
+  source.refreshPublicSource.mockResolvedValue({ root, tag: "0.3.0", commit: "abc", release });
+  prompts.checkbox.mockResolvedValueOnce(["runtime"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("confirm");
+  await runOperation("install");
+  expect(release).toHaveBeenCalledOnce();
+  expect(prompts.input.mock.calls.some(([config]) => config.message.includes("返回主菜单"))).toBe(true);
+  expect(prompts.select.mock.calls.some(([config]) => config.message === "选择操作:")).toBe(false);
 });
