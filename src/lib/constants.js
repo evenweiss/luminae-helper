@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { join } from "path";
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, lstatSync } from "fs";
 import { commandExists } from "../utils/platform.js";
 
 // ── Tools ──
@@ -147,8 +147,9 @@ function generateInstallTargets(skillId, skillType) {
   return targets;
 }
 
-export function discoverSkills() {
-  const packageDir = getPackageDir();
+let skillsRoot = null;
+
+export function discoverSkills(packageDir = skillsRoot || getPackageDir()) {
   const skills = [];
 
   const typeDirs = [
@@ -160,14 +161,14 @@ export function discoverSkills() {
 
   for (const { dir, type } of typeDirs) {
     const typePath = join(packageDir, dir);
-    if (!existsSync(typePath)) continue;
+    if (!existsSync(typePath) || !lstatSync(typePath).isDirectory()) continue;
 
     for (const entry of readdirSync(typePath)) {
       const skillPath = join(typePath, entry);
-      if (!statSync(skillPath).isDirectory()) continue;
+      if (!lstatSync(skillPath).isDirectory()) continue;
 
       const skillFile = join(skillPath, "SKILL.md");
-      if (!existsSync(skillFile)) continue;
+      if (!existsSync(skillFile) || !lstatSync(skillFile).isFile()) continue;
 
       const skillId = entry;
 
@@ -195,6 +196,40 @@ export function discoverSkills() {
 
 export const SKILLS = discoverSkills();
 
+export function setSkillsSource(root) {
+  const skills = discoverSkills(root);
+  skillsRoot = root;
+  SKILLS.splice(0, SKILLS.length, ...skills);
+}
+
+export function discoverInstalledSkills(tools = TOOLS) {
+  const found = new Map();
+  for (const tool of tools) {
+    for (const mode of ["file", "dir"]) {
+      const parent = mode === "file" ? tool.commandDir?.() : tool.skillDir?.();
+      if (!parent || !existsSync(parent)) continue;
+      for (const entry of readdirSync(parent)) {
+        const dest = join(parent, entry);
+        if (mode === "file" ? !entry.endsWith(".md") || !lstatSync(dest).isFile() : !lstatSync(dest).isDirectory()) continue;
+        const file = mode === "file" ? dest : join(dest, "SKILL.md");
+        if (!existsSync(file) || !lstatSync(file).isFile()) continue;
+        const content = readFileSync(file, "utf8");
+        if (!content.includes("managed-by: luminae-helper")) continue;
+        const id = mode === "file" ? entry.slice(0, -3) : entry;
+        // A command and a skill with the same id may both be installed in one tool.
+        const key = `${mode}:${id}`;
+        if (!found.has(key)) found.set(key, { id: key, ...parseSkillMeta(id, content), type: mode === "file" ? "command" : "skill", installTargets: [] });
+        found.get(key).installTargets.push({ toolId: tool.id, installMode: mode, conversion: null, destPath: () => dest });
+      }
+    }
+  }
+  return [...found.values()];
+}
+
+export function useInstalledSkills() {
+  SKILLS.splice(0, SKILLS.length, ...discoverInstalledSkills());
+}
+
 export function detectInstalledTools() {
   return TOOLS.map((tool) => ({
     ...tool,
@@ -208,5 +243,5 @@ export function getSkillSourcePath(skillId) {
     throw new Error(`Unknown skillId: "${skillId}" — not found in discovered skills`);
   }
   const subDir = skill.type === "command" ? "commands" : "skills";
-  return join(getPackageDir(), subDir, skillId);
+  return join(skillsRoot || getPackageDir(), subDir, skillId);
 }

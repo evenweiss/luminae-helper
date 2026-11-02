@@ -2,11 +2,12 @@
 
 AI 编程工具的 skills/commands 管理 CLI。一键将公共 AI agent 技能安装到 Claude Code、Cursor、Codex、Hermes Agent、OpenCode、Trae 等工具中。
 
-npm 包在构建时将所有内容打包，运行时纯本地操作文件系统，不访问网络。
+公共内容不内置在 npm 包中。选择「安装 / 更新」时从 `ai-skills` 拉取最新正式 Git Tag，再复制到目标工具。首次需要网络与 Git；卸载和 `--version` 不需要拉取技能。
 
 ## 前置条件
 
 - Node.js >= 18.0.0
+- Git（公共技能安装 / 更新需要访问 GitHub）
 - 至少一个目标 AI 工具已安装
 
 ## 安装
@@ -124,42 +125,26 @@ npm uninstall -g luminae-helper
 
 ## 开发
 
-### 同步公共技能
+### 公共技能来源与缓存
 
-`commands/` 和 `skills/` 是构建产物（gitignored）。本地开发时，保持 `ai-skills` 为同级目录或设置环境变量：
+源仓库为 `https://github.com/evenweiss/ai-skills.git`。每次选择「安装 / 更新」都会检查最大正式版本 Tag（`X.Y.Z` 或 `vX.Y.Z`，不含预发布版本），不跟随未发布的 main。界面显示实际 Tag 和提交。
+
+缓存位于 `~/.cache/luminae-helper/public-skills/`：首次 clone，后续 fetch。每个提交拥有独立快照，更新不会改动其他安装流程正在使用的源码。不要编辑缓存；被修改的快照会拒绝用于安装，也不会被自动覆盖。
+
+更新失败时，CLI 显示有效旧缓存的 Tag/提交，默认返回；只有明确选择才使用旧缓存安装，且提示未确认是最新版本。没有有效缓存时停止本次安装。删除缓存后，下次安装会重新下载；已安装的受管内容仍可离线卸载，包括新版本中已移除的条目。
+
+安装继续采用复制方式；更新缓存不会自动修改已安装技能，需要再次选择安装 / 更新。公共技能保留覆盖保护，公司内部技能不属于本工具。
+
+### 测试与发布
 
 ```bash
-git clone https://github.com/evenweiss/ai-skills.git ../ai-skills
-LUMINAE_SKILLS_SOURCE=../ai-skills npm run sync-skills
+npm test
+npm pack
 ```
 
-脚本会扫描 `ai-skills/commands/` 和 `ai-skills/skills/`，将包含 `SKILL.md` 的子目录复制到本项目的对应目录。
+测试使用临时源码、Git 仓库和目标目录，不依赖本地公共技能副本。打包和 npm 安装不再触发技能下载。`commands/`、`skills/` 的旧生成目录仍被忽略，但不会进入 npm 包；旧 `sync-skills` 脚本已移除。
 
-### 发布
-
-```bash
-npm publish
-```
-
-发布前 `prepublishOnly` 钩子以 `--strict` 模式运行同步脚本，确保至少有一个 command 或 skill 被打包。
-
-### 项目结构
-
-```
-luminae-helper/
-├── src/
-│   ├── cli.js                  # 入口
-│   ├── index.js                # runCli() 导出
-│   └── lib/
-│       ├── constants.js        # 工具定义、技能发现、安装目标生成
-│       ├── installer.js        # 安装/卸载逻辑
-│       ├── ui.js               # 交互式 TUI（inquirer）
-│       └── checkbox-with-action-rows.js  # 带功能行的多选组件
-├── scripts/fetch-skills.js     # 构建时技能同步脚本
-├── commands/                   # 构建产物（gitignored）
-├── skills/                     # 构建产物（gitignored）
-└── package.json
-```
+需要正式发布 CLI 时再执行 `npm publish`，公共技能的新 Tag 不要求 CLI 同步发版。
 
 ## Library API
 
@@ -170,9 +155,11 @@ import { runCli } from "luminae-helper";
 
 const code = await runCli({
   argv: process.argv.slice(2),
-  packageRoot: import.meta.dirname,  // 指向你自己的 commands/ skills/
+  packageRoot: import.meta.dirname,  // 包装器的 package.json 所在目录
 });
 process.exit(code);
 ```
 
-`packageRoot` 让包装器提供自己的 `commands/` 和 `skills/`，复用相同的交互式安装引擎。
+`packageRoot` 用于包装器名称、版本和 registry 查询；公共技能统一使用运行时仓库缓存。
+
+迁移注意：`packageRoot` 不再作为公共技能分发源，包装器无需打包自己的 `commands/`、`skills/` 或执行同步钩子。已安装技能的管理标识保持兼容。
