@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+import { cleanupCache, leaseSource, withCacheLock } from "./cache-lifecycle.js";
 import { discoverSkills } from "./constants.js";
 
 const exec = promisify(execFile);
@@ -61,7 +62,28 @@ export function readCachedSource(options = {}) {
   } catch { return null; }
 }
 
+export async function acquireCachedSource(options = {}) {
+  const resolved = optionsWithDefaults(options);
+  return withCacheLock(resolved.cacheDir, () => {
+    const source = readCachedSource(resolved);
+    const held = source ? leaseSource(resolved.cacheDir, source) : null;
+    cleanupCache(resolved.cacheDir);
+    return held;
+  });
+}
+
 export async function refreshPublicSource(options = {}) {
+  const resolved = optionsWithDefaults(options);
+  return withCacheLock(resolved.cacheDir, async () => {
+    cleanupCache(resolved.cacheDir);
+    try {
+      const source = await refreshUnlocked(resolved);
+      return leaseSource(resolved.cacheDir, source);
+    } finally { cleanupCache(resolved.cacheDir); }
+  });
+}
+
+async function refreshUnlocked(options) {
   const { repo, cacheDir } = optionsWithDefaults(options);
   mkdirSync(cacheDir, { recursive: true });
   const mirror = join(cacheDir, "repository.git");
