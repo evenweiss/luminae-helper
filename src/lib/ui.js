@@ -3,7 +3,8 @@ import gradientString from "gradient-string";
 import { select as Select, input, Separator } from "@inquirer/prompts";
 import wcswidth from "wcwidth";
 import checkboxWithActionRows from "./checkbox-with-action-rows.js";
-import { SKILLS, TOOLS, detectInstalledTools } from "./constants.js";
+import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
+import { refreshPublicSource, readCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 
 /**
@@ -48,11 +49,14 @@ function printSectionTitle(title) {
   console.log(chalk.cyan.bold(TERM_GUTTER + title + "\n"));
 }
 
+let publicSourceLabel = "";
+
 function printBanner() {
   console.clear();
   const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("  LUMINAE HELPER  ");
   console.log("\n" + TERM_GUTTER + banner);
   console.log(chalk.gray(TERM_GUTTER + "AI coding tools' skills manager\n"));
+  if (publicSourceLabel) console.log(TERM_GUTTER + publicSourceLabel + "\n");
 }
 
 /**
@@ -523,6 +527,42 @@ async function runFlow(isUninstall) {
     return "back";
   }
 
+  if (isUninstall) {
+    useInstalledSkills();
+    publicSourceLabel = "已安装的受管内容（离线卸载）";
+  } else {
+    let source;
+    console.log(TERM_GUTTER + "正在检查公共技能正式版本…");
+    try {
+      source = await refreshPublicSource();
+      publicSourceLabel = `公共技能 ${source.tag} · ${source.commit}`;
+    } catch (error) {
+      console.log(chalk.yellow(TERM_GUTTER + `公共技能更新失败：${error.message}`));
+      const cached = readCachedSource();
+      if (!cached) {
+        console.log(TERM_GUTTER + "没有可用的已验证缓存，本次安装已停止。");
+        await input({ message: "按回车返回主菜单…" }, inquirerContext);
+        return "back";
+      }
+      const choice = await Select({
+        message: `是否使用旧缓存 ${cached.tag} · ${cached.commit}？`,
+        choices: [
+          { name: "返回，不安装", value: "back" },
+          { name: "使用此缓存安装（未确认是最新版本）", value: "cache" },
+        ],
+      }, inquirerContext);
+      if (choice !== "cache") return "back";
+      source = cached;
+      publicSourceLabel = `公共技能旧缓存 ${source.tag} · ${source.commit}（未确认最新）`;
+    }
+    setSkillsSource(source.root);
+  }
+  if (SKILLS.length === 0) {
+    console.log(TERM_GUTTER + "没有可操作的命令/技能。");
+    await input({ message: "按回车返回主菜单…" }, inquirerContext);
+    return "back";
+  }
+
   let step = 1;
   let selectedSkillIds = null;
   let selectedToolIds = null;
@@ -645,7 +685,7 @@ export async function runInteractive() {
       {
         message: "选择操作:",
         choices: [
-          { name: padChoice(" 安装 Skill", 20), value: "install" },
+          { name: padChoice(" 安装 / 更新 Skill", 20), value: "install" },
           { name: padChoice(" 卸载 Skill", 20), value: "uninstall" },
           { name: padChoice(" 退出", 20), value: "exit" },
         ],

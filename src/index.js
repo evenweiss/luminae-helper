@@ -4,7 +4,6 @@ export async function runCli(options = {}) {
     globalThis.__LUMINAE_PACKAGE_ROOT__ = options.packageRoot;
   }
 
-  const { runInteractive, TERM_GUTTER } = await import("./lib/ui.js");
   const { printVersion, checkOutdated } = await import("./utils/version.js");
 
   if (argv.includes("--version") || argv.includes("-v")) {
@@ -17,6 +16,7 @@ export async function runCli(options = {}) {
     return 0;
   }
 
+  const { runInteractive, TERM_GUTTER } = await import("./lib/ui.js");
   try {
     await runInteractive();
     return 0;

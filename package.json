@@ -12,20 +12,13 @@
     "src/index.js",
     "src/lib/*.js",
     "src/utils/*.js",
-    "scripts/fetch-skills.js",
-    "commands/",
-    "skills/",
     "README.md",
     "CHANGELOG.md"
   ],
   "scripts": {
     "start": "node src/cli.js",
     "dev": "node --watch src/cli.js",
-    "test": "vitest run",
-    "sync-skills": "node scripts/fetch-skills.js",
-    "prepare": "node scripts/fetch-skills.js",
-    "prepack": "node scripts/fetch-skills.js --strict",
-    "prepublishOnly": "node scripts/fetch-skills.js --strict"
+    "test": "vitest run"
   },
   "keywords": [
     "claude",

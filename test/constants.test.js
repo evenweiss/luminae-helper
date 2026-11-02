@@ -1,3 +1,4 @@
+import "./fixture.js";
 import { describe, it, expect } from "vitest";
 import { join } from "path";
 import { tmpdir } from "os";
