@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 - 新增 runSkillOperation 单次公共安装/卸载入口，供包装器组织统一主菜单；复用现有保护和租约释放，独立菜单与版本命令保持兼容。
 
