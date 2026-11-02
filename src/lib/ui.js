@@ -4,7 +4,7 @@ import { select as Select, input, Separator } from "@inquirer/prompts";
 import wcswidth from "wcwidth";
 import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
-import { refreshPublicSource, readCachedSource } from "./public-source.js";
+import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 
 /**
@@ -506,6 +506,12 @@ async function stepExecute(skillIds, toolIds, installedTools, isUninstall, faile
 
 // ── Unified flow (install / uninstall) ──
 async function runFlow(isUninstall) {
+  let heldSource;
+  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }); }
+  finally { await heldSource?.release?.(); }
+}
+
+async function runFlowWithSource(isUninstall, holdSource) {
   const installedTools = detectInstalledTools().filter(t => t.installed);
   if (installedTools.length === 0) {
     await afterPromptFlush();
@@ -535,10 +541,12 @@ async function runFlow(isUninstall) {
     console.log(TERM_GUTTER + "正在检查公共技能正式版本…");
     try {
       source = await refreshPublicSource();
+      holdSource(source);
       publicSourceLabel = `公共技能 ${source.tag} · ${source.commit}`;
     } catch (error) {
       console.log(chalk.yellow(TERM_GUTTER + `公共技能更新失败：${error.message}`));
-      const cached = readCachedSource();
+      const cached = await acquireCachedSource();
+      if (cached) holdSource(cached);
       if (!cached) {
         console.log(TERM_GUTTER + "没有可用的已验证缓存，本次安装已停止。");
         await input({ message: "按回车返回主菜单…" }, inquirerContext);
