@@ -86,3 +86,10 @@ it("single install completion releases its lease and labels the return to the wr
   expect(prompts.input.mock.calls.some(([config]) => config.message.includes("返回主菜单"))).toBe(true);
   expect(prompts.select.mock.calls.some(([config]) => config.message === "选择操作:")).toBe(false);
 });
+it("single operation reports an explicit exit from the skill list", async () => {
+  const release = vi.fn().mockResolvedValue(undefined);
+  source.refreshPublicSource.mockResolvedValue({ root, tag: "0.3.0", commit: "abc", release });
+  prompts.checkbox.mockResolvedValueOnce(["__exit__"]);
+  await expect(runOperation("install")).resolves.toBe("abort");
+  expect(release).toHaveBeenCalledOnce();
+});

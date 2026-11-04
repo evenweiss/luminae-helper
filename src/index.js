@@ -22,8 +22,10 @@ export async function runCli(options = {}) {
 
   const { runInteractive, runOperation, TERM_GUTTER } = await import("./lib/ui.js");
   try {
-    if (options.operation) await runOperation(options.operation);
-    else await runInteractive();
+    if (options.operation) {
+      // 面板里显式选择「退出」时，把结束整个工具的意图交给包装器
+      if (await runOperation(options.operation) === "abort") return "abort";
+    } else await runInteractive();
     return 0;
   } catch (error) {
     if (error?.name === "ExitPromptError") {
