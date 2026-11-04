@@ -1,6 +1,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync, readdirSync, readFileSync, lstatSync } from "fs";
+import { isManagedSkill } from "./managed-by.js";
 import { commandExists } from "../utils/platform.js";
 
 // ── Tools ──
@@ -214,7 +215,7 @@ export function discoverInstalledSkills(tools = TOOLS) {
         const file = mode === "file" ? dest : join(dest, "SKILL.md");
         if (!existsSync(file) || !lstatSync(file).isFile()) continue;
         const content = readFileSync(file, "utf8");
-        if (!content.includes("managed-by: luminae-helper")) continue;
+        if (!isManagedSkill(content)) continue;
         const id = mode === "file" ? entry.slice(0, -3) : entry;
         // A command and a skill with the same id may both be installed in one tool.
         const key = `${mode}:${id}`;

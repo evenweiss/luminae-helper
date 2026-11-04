@@ -1,3 +1,5 @@
+export { isManagedSkill } from "./lib/managed-by.js";
+
 export async function runCli(options = {}) {
   const argv = Array.isArray(options.argv) ? options.argv : process.argv.slice(2);
   if (options.packageRoot) {
