@@ -195,7 +195,8 @@ async function stepConfirmConversionFallbacks(skillIds, toolIds, embedded = fals
           { name: "✓ 允许转换并安装", value: "allow" },
           { name: "- 跳过该工具的这些转换项", value: "skip" },
           { name: "↩ 返回上一步", value: "back" },
-          { name: embedded ? "↩ 返回主菜单" : "✕ 退出", value: "exit" },
+          ...(embedded ? [{ name: "↩ 返回主菜单", value: "menu" }] : []),
+          { name: "✕ 退出", value: "exit" },
         ],
         theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
       },
@@ -203,7 +204,8 @@ async function stepConfirmConversionFallbacks(skillIds, toolIds, embedded = fals
     ).catch(() => "back");
 
     if (ans === "back") return { action: "back", skippedKeys };
-    if (ans === "exit") return { action: "exit", skippedKeys };
+    if (ans === "menu") return { action: "exit", skippedKeys };
+    if (ans === "exit") return { action: "abort", skippedKeys };
     if (ans === "skip") {
       for (const { skill } of items) skippedKeys.add(`${toolId}::${skill.id}`);
     }
@@ -243,7 +245,7 @@ async function runCheckbox(config) {
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills(embedded = false) {
+async function stepSelectSkills() {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -262,7 +264,7 @@ async function stepSelectSkills(embedded = false) {
 
     const ans = await runCheckbox({
       message: "选择命令/技能:",
-      choices: withNavChoices(skillChoices, "↩ 返回主菜单", embedded ? null : "✕ 退出"),
+      choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出"),
       loop: false,
       theme,
     });
@@ -270,7 +272,7 @@ async function stepSelectSkills(embedded = false) {
     const result = parseCheckboxResult(ans);
 
     if (result === "back") return "back";
-    if (result === "exit") return "exit";
+    if (result === "exit") return "abort";
 
     if (result.length === 0) {
       console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个命令/技能"));
@@ -283,7 +285,7 @@ async function stepSelectSkills(embedded = false) {
 }
 
 // ── Step 2: Select tools (checkbox multi-select) ──
-async function stepSelectTools(installedTools, embedded = false) {
+async function stepSelectTools(installedTools) {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -302,7 +304,7 @@ async function stepSelectTools(installedTools, embedded = false) {
     // 第二步：底部为返回/退出功能行（移上后回车触发）
     const ans = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(toolChoices, "↩ 返回上一步", embedded ? "↩ 返回主菜单" : "✕ 退出"),
+      choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出"),
       loop: false,
       theme,
     });
@@ -310,7 +312,7 @@ async function stepSelectTools(installedTools, embedded = false) {
     const result = parseCheckboxResult(ans);
 
     if (result === "back") return "back";
-    if (result === "exit") return "exit";
+    if (result === "exit") return "abort";
 
     if (result.length === 0) {
       console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
@@ -346,13 +348,16 @@ async function stepPreviewConfirm(isUninstall, embedded = false) {
       choices: [
         { name: "✓ 确认" + actionLabel, value: "confirm" },
         { name: "↩ 返回上一步", value: "back" },
-        { name: embedded ? "↩ 返回主菜单" : "✕ 退出", value: "exit" },
+        ...(embedded ? [{ name: "↩ 返回主菜单", value: "menu" }] : []),
+        { name: "✕ 退出", value: "exit" },
       ],
       theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
     },
     inquirerContext
   ).catch(() => "back");
 
+  if (ans === "menu") return "exit"; // 结束本次操作，回包装器主菜单
+  if (ans === "exit") return "abort"; // 退出整个工具
   return ans;
 }
 
@@ -578,25 +583,27 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills(embedded);
+      const result = await stepSelectSkills();
       if (result === "back") return "back";
-      if (result === "exit") return "exit";
+      if (result === "abort") return "abort";
       selectedSkillIds = result;
       step = 2;
     } else if (step === 2) {
-      const result = await stepSelectTools(installedTools, embedded);
+      const result = await stepSelectTools(installedTools);
       if (result === "back") { step = 1; continue; }
-      if (result === "exit") return "exit";
+      if (result === "abort") return "abort";
       selectedToolIds = result;
       skippedConversionKeys = new Set();
       step = 3;
     } else if (step === 3) {
       const result = await stepPreviewConfirm(isUninstall, embedded);
       if (result === "back") { step = 2; continue; }
+      if (result === "abort") return "abort";
       if (result === "exit") return "exit";
       if (!isUninstall && SHOW_CONVERSION_CONFIRM_PROMPT) {
         const fallbackResult = await stepConfirmConversionFallbacks(selectedSkillIds, selectedToolIds, embedded);
         if (fallbackResult.action === "back") { step = 2; continue; }
+        if (fallbackResult.action === "abort") return "abort";
         if (fallbackResult.action === "exit") return "exit";
         skippedConversionKeys = fallbackResult.skippedKeys;
       }
@@ -685,8 +692,9 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
 export async function runOperation(action) {
   if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
   await afterPromptFlush();
-  await runFlow(action === "uninstall", true);
+  const result = await runFlow(action === "uninstall", true);
   await afterPromptFlush();
+  return result;
 }
 
 // ── Main ──
@@ -716,7 +724,7 @@ export async function runInteractive() {
     await afterPromptFlush();
     const result = await runFlow(action === "uninstall");
 
-    if (result === "exit") {
+    if (result === "exit" || result === "abort") {
       exit = true;
     }
     await afterPromptFlush();
