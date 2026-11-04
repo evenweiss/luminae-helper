@@ -39,7 +39,7 @@ luminae-helper
 
 卸载时只会删除带有 `managed-by: luminae-helper` 标识的文件，不会误删用户手动创建或 AI 工具自带的同名文件。
 
-安装同理：目标位置已有同名的非本工具内容时直接跳过（结果表标「已跳过」），不会覆盖。
+安装同理：目标位置已有同名的非本工具内容时直接跳过（结果表标「已跳过」），不会覆盖。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。公共安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
 
 ### 其他命令
 
@@ -97,13 +97,14 @@ luminae-helper outdated     # 检查 npm registry 是否有新版本
 
 ### managed-by 标识
 
-安装时会在目标文件的 YAML frontmatter 中注入 `managed-by: luminae-helper`：
+复制安装或更新时，在目标文件的 YAML frontmatter 中写入 `metadata.managed-by`；已选中的受管旧副本自动迁移顶层字段，源文件保持不变：
 
 ```yaml
 ---
 name: git-push
 description: ...
-managed-by: luminae-helper
+metadata:
+  managed-by: luminae-helper
 ---
 ```
 

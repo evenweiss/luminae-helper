@@ -220,8 +220,8 @@ describe("installer.js", () => {
       const srcContent = readFileSync(srcPath, "utf-8");
       // 安装后的文件包含 managed-by 标识（注入进已有 frontmatter）
       expect(destContent).toContain("managed-by: luminae-helper");
-      // 移除标识行后与源一致
-      expect(destContent.replace("managed-by: luminae-helper\n", "")).toBe(srcContent);
+      // 移除新增 metadata 后与源一致
+      expect(destContent.replace("metadata:\n  managed-by: luminae-helper\n", "")).toBe(srcContent);
 
       rmSync(tmpDir, { recursive: true, force: true });
     });
