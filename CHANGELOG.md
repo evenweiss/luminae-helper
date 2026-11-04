@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- 导出 `checkboxWithActionRows` 与 `NAV_BACK` / `NAV_EXIT`，供包装器的勾选列表复用「返回 / 退出」功能行。
+
 ## 1.2.0
 
 - 新增 runSkillOperation 单次公共安装/卸载入口，供包装器组织统一主菜单；复用现有保护和租约释放，独立菜单与版本命令保持兼容。
