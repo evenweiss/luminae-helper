@@ -1,4 +1,6 @@
 export { isManagedSkill } from "./lib/managed-by.js";
+// 包装器（如 kfz-skills-helper）复用带「返回 / 退出」功能行的多选列表
+export { default as checkboxWithActionRows, NAV_BACK, NAV_EXIT } from "./lib/checkbox-with-action-rows.js";
 
 export async function runCli(options = {}) {
   const argv = Array.isArray(options.argv) ? options.argv : process.argv.slice(2);
