@@ -3,11 +3,11 @@ import { describe, it, expect } from "vitest";
 import { join } from "path";
 import { tmpdir } from "os";
 import { existsSync, readFileSync, rmSync } from "fs";
-import { TOOLS, SKILLS, discoverSkills, detectInstalledTools, getSkillSourcePath } from "../src/lib/constants.js";
+import { TOOLS, SKILLS, detectInstalledTools } from "../src/lib/constants.js";
 import { installSkillToTool, uninstallSkillFromTool } from "../src/lib/installer.js";
 import { commandExists } from "../src/utils/platform.js";
 
-function withTempTarget(skill, installMode) {
+function withTempTarget(skill) {
   const tmpDir = join(tmpdir(), "luminae-helper-test-" + Date.now() + "-" + Math.random().toString(16).slice(2));
   return {
     skill: {
@@ -15,8 +15,8 @@ function withTempTarget(skill, installMode) {
       installTargets: [
         {
           toolId: "test-tool",
-          installMode,
-          destPath: () => installMode === "dir" ? join(tmpDir, skill.id) : join(tmpDir, `${skill.id}.md`),
+          installMode: "dir",
+          destPath: () => join(tmpDir, skill.id),
         },
       ],
     },
@@ -24,7 +24,7 @@ function withTempTarget(skill, installMode) {
       id: "test-tool",
       name: "Test Tool",
     },
-    destPath: installMode === "dir" ? join(tmpDir, skill.id) : join(tmpDir, `${skill.id}.md`),
+    destPath: join(tmpDir, skill.id),
     tmpDir,
   };
 }
@@ -51,7 +51,7 @@ describe("constants.js", () => {
   describe("discoverSkills", () => {
     it("should find entries from bundled commands/ or skills/ directories", () => {
       expect(SKILLS.length).toBeGreaterThan(0);
-      expect(SKILLS.some(s => s.type === "command" || s.type === "skill")).toBe(true);
+      expect(SKILLS.map(s => s.id)).toEqual(expect.arrayContaining(["git-push", "identity"]));
     });
 
     it("each skill has id, name, description, installTargets", () => {
@@ -80,37 +80,14 @@ describe("constants.js", () => {
       }
     });
 
-    it("file mode destPath ends with .md", () => {
-      const skill = SKILLS.find(s => s.id === "git-push");
-      const target = skill.installTargets.find(t => t.toolId === "claude-code");
-      const path = target.destPath();
-      expect(path.endsWith(".md")).toBe(true);
-    });
-
-    it("dir mode destPath ends with skillId", () => {
-      const skill = SKILLS.find(s => s.id === "identity");
-      const target = skill.installTargets.find(t => t.toolId === "hermes-agent");
-      const path = target.destPath();
-      expect(path.endsWith(".md")).toBe(false);
-      expect(path.endsWith(skill.id)).toBe(true);
-    });
-
-    it("routes command entries to skill-only tools as fallback skill directories", () => {
-      const command = SKILLS.find(s => s.id === "git-push");
-      const target = command.installTargets.find(t => t.toolId === "hermes-agent");
-
-      expect(target.installMode).toBe("dir");
-      expect(target.conversion).toBe("command-to-skill");
-      expect(target.destPath()).toMatch(/[\\/]git-push$/);
-    });
-
-    it("routes command entries to commandDir for tools that support commands", () => {
-      const command = SKILLS.find(s => s.id === "git-push");
-      const commandTarget = command.installTargets.find(t => t.toolId === "claude-code");
-
-      expect(commandTarget.installMode).toBe("file");
-      expect(commandTarget.conversion).toBeNull();
-      expect(commandTarget.destPath()).toMatch(/[\\/]commands[\\/]git-push\.md$/);
+    it("routes every source entry to Skill directories for all supported tools", () => {
+      for (const skill of SKILLS) {
+        for (const target of skill.installTargets) {
+          const tool = TOOLS.find(t => t.id === target.toolId);
+          expect(target.installMode).toBe("dir");
+          expect(target.destPath()).toBe(join(tool.skillDir(), skill.id));
+        }
+      }
     });
   });
 
@@ -124,33 +101,13 @@ describe("constants.js", () => {
     });
   });
 
-  describe("getSkillSourcePath", () => {
-    it("returns a path ending with skills/<skillId> for skill entries", () => {
-      const path = getSkillSourcePath("identity");
-      expect(path).toMatch(/skills\/identity$/);
-    });
-
-    it("returns a path ending with commands/<skillId> for another command entry", () => {
-      const path = getSkillSourcePath("git-push");
-      expect(path).toMatch(/commands\/git-push$/);
-    });
-  });
 });
 
 // ── installer.js ──
 describe("installer.js", () => {
   describe("installSkillToTool", () => {
-    it("should install a skill in file mode", () => {
-      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"), "file");
-      const result = installSkillToTool(skill, tool);
-      expect(result.success).toBe(true);
-      expect(result.message).toContain("Installed to");
-      expect(existsSync(destPath)).toBe(true);
-      if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-    });
-
     it("should install a skill in dir mode", () => {
-      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"), "dir");
+      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"));
       const result = installSkillToTool(skill, tool);
       expect(result.success).toBe(true);
       if (existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
@@ -165,31 +122,19 @@ describe("installer.js", () => {
         description: "Nope",
         installTargets: TOOLS.map(t => ({
           toolId: t.id,
-          installMode: "file",
-          destPath: () => join(tmpDir, "fake.md"),
+          installMode: "dir",
+          destPath: () => join(tmpDir, "fake"),
         })),
       };
       const result = installSkillToTool(fakeSkill, { id: TOOLS[0].id, name: TOOLS[0].name });
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Unknown skillId");
+      expect(result.message).toContain("找不到 nonexistent 的技能源");
     });
   });
 
   describe("uninstallSkillFromTool", () => {
-    it("should uninstall a file-mode skill after installing", () => {
-      const { skill, tool, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"), "file");
-
-      const installResult = installSkillToTool(skill, tool);
-      expect(installResult.success).toBe(true);
-
-      const result = uninstallSkillFromTool(skill, tool);
-      expect(result.success).toBe(true);
-      expect(result.message).toContain("Uninstalled");
-      if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-    });
-
     it("should uninstall a dir-mode skill after installing", () => {
-      const { skill, tool, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"), "dir");
+      const { skill, tool, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"));
 
       const installResult = installSkillToTool(skill, tool);
       expect(installResult.success).toBe(true);
@@ -200,7 +145,7 @@ describe("installer.js", () => {
     });
 
     it("should return failure if not installed", () => {
-      const { skill, tool, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"), "file");
+      const { skill, tool, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"));
 
       const result = uninstallSkillFromTool(skill, tool);
       expect(result.success).toBe(false);
@@ -211,12 +156,12 @@ describe("installer.js", () => {
 
   describe("install then verify content", () => {
     it("installed SKILL.md content includes source plus managed-by marker", () => {
-      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"), "file");
+      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "git-push"));
 
       installSkillToTool(skill, tool);
-      const srcPath = join(getSkillSourcePath(skill.id), "SKILL.md");
+      const srcPath = join(skill.sourceDir, "SKILL.md");
 
-      const destContent = readFileSync(destPath, "utf-8");
+      const destContent = readFileSync(join(destPath, "SKILL.md"), "utf-8");
       const srcContent = readFileSync(srcPath, "utf-8");
       // 安装后的文件包含 managed-by 标识（注入进已有 frontmatter）
       expect(destContent).toContain("managed-by: luminae-helper");
@@ -227,7 +172,7 @@ describe("installer.js", () => {
     });
 
     it("dir mode should copy all files from skill directory", () => {
-      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"), "dir");
+      const { skill, tool, destPath, tmpDir } = withTempTarget(SKILLS.find(s => s.id === "identity"));
 
       installSkillToTool(skill, tool);
       expect(existsSync(join(destPath, "SKILL.md"))).toBe(true);

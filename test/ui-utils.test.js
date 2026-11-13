@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { padChoice, parseCheckboxResult, collectConversionFallbacks } from "../src/lib/ui.js";
+import { padChoice, parseCheckboxResult } from "../src/lib/ui.js";
 
 describe("padChoice", () => {
   it("pads short text to target width", () => {
@@ -72,29 +72,5 @@ describe("parseCheckboxResult", () => {
 
   it("returns back for non-special values as fallback", () => {
     expect(parseCheckboxResult("other")).toBe("back");
-  });
-});
-
-describe("collectConversionFallbacks", () => {
-  it("collects command-to-skill fallbacks per skill-only tool", () => {
-    // identity 是 skill（原生目录安装，无转换），git-push 是 command（需转换）
-    const result = collectConversionFallbacks(["identity", "git-push"], ["hermes-agent"]);
-
-    expect(result.has("hermes-agent")).toBe(true);
-    const hermes = result.get("hermes-agent");
-    expect(hermes.tool.name).toBe("Hermes Agent");
-    expect(hermes.items.map(item => item.skill.id)).toEqual(["git-push"]);
-    expect(hermes.items[0].target.conversion).toBe("command-to-skill");
-  });
-
-  it("returns empty for unknown tool ids", () => {
-    const result = collectConversionFallbacks(["identity", "git-push"], ["trae"]);
-    expect(result.size).toBe(0);
-  });
-
-  it("does not collect native installs for tools that support both modes", () => {
-    const result = collectConversionFallbacks(["identity", "git-push"], ["claude-code"]);
-
-    expect(result.size).toBe(0);
   });
 });

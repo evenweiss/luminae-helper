@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- 公共技能统一安装为 Skill 目录。更新选中的受管旧命令时，先安装 Skill 再移除旧文件，仍支持离线卸载旧命令。
+- 增加 `skill install <技能ID> --tool <宿主ID>`，按当前正式目录安装指定技能。
+- 在交互安装流程中支持 Codex 和 Claude Code 插件，同时支持 `plugin install` 命令。默认按技能名安装 Helper 随包提供的受管插件，也可显式指定外部本地包。ai-development-workflow 插件 0.8.1 在两端均包含压缩续接 Hook，按各自宿主规则加载。
+
 ## 1.2.3
 
 - 验证运行时安装 / 更新可获取 ai-skills 0.5.0 正式 Tag，完整复制文档执行者、工作区绑定和接替所需引用及配置。

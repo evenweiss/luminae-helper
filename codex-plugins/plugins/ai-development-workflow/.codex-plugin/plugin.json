@@ -1,0 +1,15 @@
+{
+  "name": "ai-development-workflow",
+  "version": "0.8.1",
+  "description": "AI 协作开发流程与上下文压缩后的统筹续接提醒。",
+  "skills": "./skills/",
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "AI 协作开发流程",
+    "shortDescription": "跨会话协作、任务交接与独立验收",
+    "capabilities": [
+      "Instructions",
+      "Lifecycle hooks"
+    ]
+  }
+}

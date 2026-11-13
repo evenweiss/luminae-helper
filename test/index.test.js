@@ -1,5 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const ui = vi.hoisted(() => ({ runInteractive: vi.fn(), runOperation: vi.fn(), TERM_GUTTER: "  " }));
+const plugins = vi.hoisted(() => ({ runPluginCommand: vi.fn() }));
+vi.mock("../src/lib/codex-plugin.js", () => plugins);
 const version = vi.hoisted(() => ({ printVersion: vi.fn(), checkOutdated: vi.fn() }));
 vi.mock("../src/lib/ui.js", () => ui);
 vi.mock("../src/utils/version.js", () => version);
@@ -28,4 +30,20 @@ it("keeps standalone menu and version behavior", async () => {
   await api.runCli({ argv: ["--version"] }); await api.runCli({ argv: ["outdated"] });
   expect(version.printVersion).toHaveBeenCalledOnce(); expect(version.checkOutdated).toHaveBeenCalledOnce();
   expect(ui.runOperation).not.toHaveBeenCalled();
+});
+
+
+it("installs a plugin from arguments without launching the interactive menu", async () => {
+  const args = ["install", "workflow", "--source", "/fixture/local source"];
+  expect(await api.runCli({ argv: ["plugin", ...args] })).toBe(0);
+  expect(plugins.runPluginCommand).toHaveBeenCalledExactlyOnceWith(args);
+  expect(ui.runInteractive).not.toHaveBeenCalled();
+});
+
+it("returns a failing CLI exit code for a native plugin failure", async () => {
+  plugins.runPluginCommand.mockRejectedValue(new Error("plugin not found"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try { expect(await api.runCli({ argv: ["plugin", "install", "unknown"] })).toBe(1); }
+  finally { log.mockRestore(); }
+  expect(ui.runInteractive).not.toHaveBeenCalled();
 });

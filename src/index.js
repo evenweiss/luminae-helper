@@ -8,6 +8,19 @@ export async function runCli(options = {}) {
     globalThis.__LUMINAE_PACKAGE_ROOT__ = options.packageRoot;
   }
 
+  if (argv[0] === "plugin" || argv[0] === "skill") {
+    try {
+      const runCommand = argv[0] === "plugin"
+        ? (await import("./lib/codex-plugin.js")).runPluginCommand
+        : (await import("./lib/skill-command.js")).runSkillCommand;
+      await runCommand(argv.slice(1));
+      return 0;
+    } catch (error) {
+      console.error("  Error:", error.message);
+      return 1;
+    }
+  }
+
   const { printVersion, checkOutdated } = await import("./utils/version.js");
 
   if (argv.includes("--version") || argv.includes("-v")) {

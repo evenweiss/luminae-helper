@@ -43,31 +43,3 @@ describe("parseSkillMeta (via discoverSkills)", () => {
     }
   });
 });
-
-describe("generateDestPath (via installTargets)", () => {
-  it("file mode: claude-code destPath ends with <skillId>.md", () => {
-    const skill = SKILLS.find(s => s.id === "git-push");
-    const target = skill.installTargets.find(t => t.toolId === "claude-code");
-    const path = target.destPath();
-    expect(path.endsWith("/git-push.md") || path.endsWith("\\git-push.md")).toBe(true);
-  });
-
-  it("dir mode: hermes-agent destPath ends with <skillId>", () => {
-    const skill = SKILLS.find(s => s.id === "identity");
-    const target = skill.installTargets.find(t => t.toolId === "hermes-agent");
-    const path = target.destPath();
-    expect(path.endsWith("/identity") || path.endsWith("\\identity")).toBe(true);
-  });
-
-  it("destPath for each target is consistent with target.installMode", () => {
-    const entry = SKILLS.find(s => s.id === "identity");
-    for (const target of entry.installTargets) {
-      const path = target.destPath();
-      if (target.installMode === "file") {
-        expect(path.endsWith(".md")).toBe(true);
-      } else {
-        expect(path.endsWith(entry.id)).toBe(true);
-      }
-    }
-  });
-});

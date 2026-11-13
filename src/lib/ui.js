@@ -6,6 +6,7 @@ import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
+import { PLUGIN_HOSTS, listManagedPlugins, readLocalPluginSource, installPlugin, printPluginResult } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
@@ -20,14 +21,6 @@ export const TERM_GUTTER = "  ";
  * @type {{ clearPromptOnDone: boolean }}
  */
 const inquirerContext = { clearPromptOnDone: true };
-
-/**
- * 转换提示开关：true 时保持当前交互流程，安装前逐工具询问是否允许 fallback 转换；
- * false 时用户无感知，安装阶段自动转换，仅在完成后汇总告知哪些内容发生了转换。
- *
- * 这是代码内开关，暂不暴露 CLI 参数或配置项，便于后续确认是否开启转换提示。
- */
-const SHOW_CONVERSION_CONFIRM_PROMPT = false;
 
 /**
  * 在关闭一个 inquirer prompt 之后、再 `printBanner` 或打开下一个 prompt 之前调用。
@@ -88,46 +81,8 @@ export function parseCheckboxResult(ans) {
   return "back";
 }
 
-/**
- * 找出安装时会发生“源类型 != 目标工具能力”的 fallback 转换。
- * @param {string[]} skillIds
- * @param {string[]} toolIds
- * @returns {Map<string, { tool: object, items: { skill: object, target: object }[] }>}
- */
-export function collectConversionFallbacks(skillIds, toolIds) {
-  const result = new Map();
-  const sids = asIdArray(skillIds);
-  const tids = asIdArray(toolIds);
-
-  for (const toolId of tids) {
-    const tool = TOOLS.find(t => t.id === toolId);
-    if (!tool) continue;
-
-    const items = [];
-    for (const skillId of sids) {
-      const skill = SKILLS.find(s => s.id === skillId);
-      if (!skill) continue;
-
-      const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
-      if (target?.conversion) items.push({ skill, target });
-    }
-
-    if (items.length > 0) result.set(toolId, { tool, items });
-  }
-
-  return result;
-}
-
-function conversionDescription(conversion) {
-  if (conversion === "command-to-skill") return "command 源 → skill 目录";
-  if (conversion === "skill-to-command") return "skill 源 → command 文件";
-  return "fallback 转换";
-}
-
 function installModeDescription(target) {
-  if (!target) return "未知";
-  if (target.conversion) return `转换：${conversionDescription(target.conversion)}`;
-  return target.installMode === "file" ? "原生 command 文件" : "原生 skill 目录";
+  return target.installMode === "file" ? "旧命令文件" : "Skill 目录";
 }
 
 function stripAnsi(text) {
@@ -170,50 +125,6 @@ function mergeResultRows(...rowGroups) {
   return [...merged.values()];
 }
 
-// ── Step 3: Fallback conversion confirm（每个目标工具单独确认）──
-async function stepConfirmConversionFallbacks(skillIds, toolIds, embedded = false) {
-  const fallbacks = collectConversionFallbacks(skillIds, toolIds);
-  const skippedKeys = new Set();
-
-  if (fallbacks.size === 0) return { action: "continue", skippedKeys };
-
-  for (const [toolId, { tool, items }] of fallbacks) {
-    await afterPromptFlush();
-    printBanner();
-    printSectionTitle("━━━ 兼容安装确认 ━━━");
-
-    console.log(chalk.yellow(TERM_GUTTER + `${tool.name} 不原生支持以下源类型，需要转换安装：\n`));
-    for (const { skill, target } of items) {
-      console.log(TERM_GUTTER + TERM_GUTTER + `- ${skill.name}：${conversionDescription(target.conversion)}`);
-    }
-    console.log();
-
-    const ans = await Select(
-      {
-        message: `是否允许对 ${tool.name} 使用以上兼容转换？`,
-        choices: [
-          { name: "✓ 允许转换并安装", value: "allow" },
-          { name: "- 跳过该工具的这些转换项", value: "skip" },
-          { name: "↩ 返回上一步", value: "back" },
-          ...(embedded ? [{ name: "↩ 返回主菜单", value: "menu" }] : []),
-          { name: "✕ 退出", value: "exit" },
-        ],
-        theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
-      },
-      inquirerContext
-    ).catch(() => "back");
-
-    if (ans === "back") return { action: "back", skippedKeys };
-    if (ans === "menu") return { action: "exit", skippedKeys };
-    if (ans === "exit") return { action: "abort", skippedKeys };
-    if (ans === "skip") {
-      for (const { skill } of items) skippedKeys.add(`${toolId}::${skill.id}`);
-    }
-  }
-
-  return { action: "continue", skippedKeys };
-}
-
 /**
  * 在列表末尾追加「返回 / 退出」两项（`value` 为 `__back__` / `__exit__`）。
  * 由 `checkbox-with-action-rows` 渲染为功能行：方向键移上去后按回车即触发，空格不会勾选。
@@ -249,10 +160,10 @@ async function stepSelectSkills() {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择命令/技能 ━━━");
+    printSectionTitle("━━━ 选择 Skill ━━━");
 
     const skillChoices = SKILLS.map(s => ({
-      name: s.name + "  -  " + s.description,
+      name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
       value: s.id,
       checked: true,
     }));
@@ -263,7 +174,7 @@ async function stepSelectSkills() {
     };
 
     const ans = await runCheckbox({
-      message: "选择命令/技能:",
+      message: "选择 Skill:",
       choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出"),
       loop: false,
       theme,
@@ -275,7 +186,7 @@ async function stepSelectSkills() {
     if (result === "exit") return "abort";
 
     if (result.length === 0) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个命令/技能"));
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个 Skill"));
       await new Promise(r => setTimeout(r, 1200));
       continue;
     }
@@ -365,14 +276,12 @@ async function stepPreviewConfirm(isUninstall, embedded = false) {
 /**
  * @param {string[]} skillIds
  * @param {string[]} toolIds
- * @param {object[]} installedTools
  * @param {boolean} isUninstall
  * @param {Set<string>|null} failedKeys - 若提供，只执行 key 在此集合中的组合；否则执行全部
  *   key 格式: `${toolId}::${skillId}`
- * @param {Set<string>} skippedKeys - 用户明确跳过的兼容转换项
  * @returns {{ allSuccess: boolean, failedKeys: Set<string>, permanentFailedKeys: Set<string>, resultRows: object[] }}
  */
-async function stepExecute(skillIds, toolIds, installedTools, isUninstall, failedKeys = null, skippedKeys = new Set()) {
+async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const sids = asIdArray(skillIds);
   const tids = asIdArray(toolIds);
   await afterPromptFlush();
@@ -406,18 +315,6 @@ async function stepExecute(skillIds, toolIds, installedTools, isUninstall, faile
       }
 
       const key = `${toolId}::${skillId}`;
-      if (skippedKeys.has(key)) {
-        const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
-        const reason = target?.conversion ? conversionDescription(target.conversion) : "用户跳过";
-        resultRows.push({
-          key,
-          toolName: tool.name,
-          skillName: skill.name,
-          status: chalk.gray("已跳过"),
-          mode: target?.conversion ? `跳过转换：${reason}` : "用户跳过",
-        });
-        continue;
-      }
       // 如果是重试模式，只执行之前失败的组合
       if (failedKeys && !failedKeys.has(key)) continue;
 
@@ -571,7 +468,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
     setSkillsSource(source.root);
   }
   if (SKILLS.length === 0) {
-    console.log(TERM_GUTTER + "没有可操作的命令/技能。");
+    console.log(TERM_GUTTER + "没有可操作的 Skill。");
     await input({ message: "按回车返回主菜单…" }, inquirerContext);
     return "back";
   }
@@ -579,7 +476,6 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
   let step = 1;
   let selectedSkillIds = null;
   let selectedToolIds = null;
-  let skippedConversionKeys = new Set();
 
   while (true) {
     if (step === 1) {
@@ -593,23 +489,15 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
       if (result === "back") { step = 1; continue; }
       if (result === "abort") return "abort";
       selectedToolIds = result;
-      skippedConversionKeys = new Set();
       step = 3;
     } else if (step === 3) {
       const result = await stepPreviewConfirm(isUninstall, embedded);
       if (result === "back") { step = 2; continue; }
       if (result === "abort") return "abort";
       if (result === "exit") return "exit";
-      if (!isUninstall && SHOW_CONVERSION_CONFIRM_PROMPT) {
-        const fallbackResult = await stepConfirmConversionFallbacks(selectedSkillIds, selectedToolIds, embedded);
-        if (fallbackResult.action === "back") { step = 2; continue; }
-        if (fallbackResult.action === "abort") return "abort";
-        if (fallbackResult.action === "exit") return "exit";
-        skippedConversionKeys = fallbackResult.skippedKeys;
-      }
       step = 4;
     } else if (step === 4) {
-      const { allSuccess, failedKeys, permanentFailedKeys, resultRows } = await stepExecute(selectedSkillIds, selectedToolIds, installedTools, isUninstall, null, skippedConversionKeys);
+      const { allSuccess, failedKeys, permanentFailedKeys, resultRows } = await stepExecute(selectedSkillIds, selectedToolIds, isUninstall);
       if (allSuccess) {
         printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
         await input(
@@ -630,7 +518,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
           let accumulatedResultRows = [...resultRows];
           while (attempt < 3) {
             console.log(chalk.yellow(TERM_GUTTER + `第 ${attempt} 次重试（${retryFailedKeys.size} 项）...\n`));
-            const retryResult = await stepExecute(selectedSkillIds, selectedToolIds, installedTools, isUninstall, retryFailedKeys, skippedConversionKeys);
+            const retryResult = await stepExecute(selectedSkillIds, selectedToolIds, isUninstall, retryFailedKeys);
             retrySuccess = retryResult.allSuccess;
             retryFailedKeys = retryResult.failedKeys;
             accumulatedResultRows = mergeResultRows(accumulatedResultRows, retryResult.resultRows);
@@ -697,6 +585,57 @@ export async function runOperation(action) {
   return result;
 }
 
+async function runInteractivePluginInstall() {
+  printSectionTitle("━━━ 选择插件宿主 ━━━");
+  const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
+  if (!tools.length) {
+    console.log(chalk.yellow(TERM_GUTTER + "请先安装 Codex 或 Claude Code CLI。"));
+    await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+    return "back";
+  }
+  const host = await Select({
+    message: "选择插件宿主:",
+    choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+  }, inquirerContext);
+  if (host === "__back__") return "back";
+  if (host === "__exit__") return "exit";
+  const { name: hostName } = tools.find(tool => tool.id === host);
+  const sourceDir = (await input({ message: "本地插件目录（留空使用 Helper 受管插件）:" }, inquirerContext)).trim();
+  try {
+    const local = sourceDir ? readLocalPluginSource(sourceDir, host) : null;
+    const plugins = local ? local.plugins : listManagedPlugins(host);
+    if (!plugins.length) throw new Error("当前来源没有可安装的插件。");
+    while (true) {
+      const selected = await Select({
+        message: `选择 ${hostName} 插件:`,
+        choices: withNavChoices(plugins.map(plugin => ({
+          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+          value: plugin.name,
+        })), "↩ 返回主菜单"),
+      }, inquirerContext);
+      if (selected === "__back__") return "back";
+      if (selected === "__exit__") return "exit";
+      const confirmation = await Select({
+        message: `安装 ${selected} 到 ${hostName}${local ? `（本地 ${local.directory}）` : "（Helper 受管）"}？`,
+        choices: [
+          { name: "返回上一步", value: "back" },
+          { name: "确认安装", value: "confirm" },
+          { name: "退出", value: "exit" },
+        ],
+      }, inquirerContext);
+      if (confirmation === "back") continue;
+      if (confirmation !== "confirm") return "exit";
+      printPluginResult(await installPlugin(selected, local?.directory, host), host);
+      break;
+    }
+  } catch (error) {
+    if (error?.name === "ExitPromptError") return "exit";
+    console.log(chalk.red(TERM_GUTTER + error.message));
+  }
+  await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+  return "back";
+}
+
 // ── Main ──
 export async function runInteractive() {
   let exit = false;
@@ -708,7 +647,7 @@ export async function runInteractive() {
       {
         message: "选择操作:",
         choices: [
-          { name: padChoice(" 安装 / 更新 Skill", 20), value: "install" },
+          { name: padChoice(" 安装 / 更新", 20), value: "install" },
           { name: padChoice(" 卸载 Skill", 20), value: "uninstall" },
           { name: padChoice(" 退出", 20), value: "exit" },
         ],
@@ -722,7 +661,22 @@ export async function runInteractive() {
     }
 
     await afterPromptFlush();
-    const result = await runFlow(action === "uninstall");
+    let result;
+    if (action === "install") {
+      const kind = await Select({
+        message: "选择要安装的内容类型:",
+        choices: withNavChoices([
+          { name: "Skill", value: "skill" },
+          { name: "插件", value: "plugin" },
+        ], "↩ 返回主菜单"),
+      }, inquirerContext);
+      if (kind === "__back__") continue;
+      if (kind === "__exit__") break;
+      await afterPromptFlush();
+      result = kind === "plugin" ? await runInteractivePluginInstall() : await runFlow(false);
+    } else {
+      result = await runFlow(true);
+    }
 
     if (result === "exit" || result === "abort") {
       exit = true;

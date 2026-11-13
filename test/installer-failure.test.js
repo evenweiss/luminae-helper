@@ -24,8 +24,8 @@ vi.mock("fs", async importOriginal => {
 const { SKILLS, setSkillsSource } = await import("../src/lib/constants.js");
 const { installSkillToTool } = await import("../src/lib/installer.js");
 
-describe.each(["dir", "file"])("failed update preserves owned target (%s)", mode => {
-  let root, dest, file, skill, tool;
+describe("failed update preserves owned Skill and legacy command", () => {
+  let root, dest, file, legacy, skill, tool;
   const original = "---\nname: demo\nmanaged-by: luminae-helper\n---\nold body\n";
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "installer-failure-"));
@@ -33,22 +33,26 @@ describe.each(["dir", "file"])("failed update preserves owned target (%s)", mode
     mkdirSync(source, { recursive: true });
     writeFileSync(join(source, "SKILL.md"), "---\nname: demo\n---\nnew body\n");
     setSkillsSource(join(root, "source"));
-    dest = join(root, "target", mode === "dir" ? "demo" : "demo.md");
-    file = mode === "dir" ? join(dest, "SKILL.md") : dest;
+    dest = join(root, "target/demo");
+    file = join(dest, "SKILL.md");
+    legacy = join(root, "commands/demo.md");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, original);
-    if (mode === "dir") writeFileSync(join(dest, "mine.txt"), "old sentinel");
-    tool = { id: "fault-test" };
-    skill = { ...SKILLS[0], installTargets: [{ toolId: tool.id, installMode: mode, destPath: () => dest }] };
+    writeFileSync(join(dest, "mine.txt"), "old sentinel");
+    mkdirSync(dirname(legacy), { recursive: true });
+    writeFileSync(legacy, original);
+    tool = { id: "fault-test", commandDir: () => dirname(legacy) };
+    skill = { ...SKILLS[0], installTargets: [{ toolId: tool.id, installMode: "dir", destPath: () => dest }] };
     fault.dest = dest;
   });
   afterEach(() => { fault.action = null; fault.dest = null; rmSync(root, { recursive: true, force: true }); });
 
-  it.each(mode === "dir" ? ["stamp", "backup", "publish"] : ["stamp", "publish"])("preserves old bytes and files when %s fails", action => {
+  it.each(["stamp", "backup", "publish"])("preserves old bytes and files when %s fails", action => {
     fault.action = action;
     expect(installSkillToTool(skill, tool).success).toBe(false);
     expect(readFileSync(file, "utf8")).toBe(original);
-    if (mode === "dir") expect(readFileSync(join(dest, "mine.txt"), "utf8")).toBe("old sentinel");
-    expect(readdirSync(dirname(dest))).toEqual([mode === "dir" ? "demo" : "demo.md"]);
+    expect(readFileSync(join(dest, "mine.txt"), "utf8")).toBe("old sentinel");
+    expect(readFileSync(legacy, "utf8")).toBe(original);
+    expect(readdirSync(dirname(dest))).toEqual(["demo"]);
   });
 });

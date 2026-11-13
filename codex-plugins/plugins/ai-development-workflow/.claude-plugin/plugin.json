@@ -1,0 +1,8 @@
+{
+  "name": "ai-development-workflow",
+  "version": "0.8.1",
+  "description": "AI 协作开发流程与上下文压缩后的统筹续接提醒。",
+  "author": {
+    "name": "evenweiss"
+  }
+}
