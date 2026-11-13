@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^compact$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "timeout": 5,
+            "args": [
+              "-B",
+              "${CLAUDE_PLUGIN_ROOT}/skills/ai-development-workflow/scripts/codex_compact.py",
+              "--host",
+              "claude-code"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+interface:
+  display_name: "AI 协作开发流程"
+  short_description: "协调跨阶段与多工作区开发，覆盖专业分工、结果回传、监控核查、验证及交接"

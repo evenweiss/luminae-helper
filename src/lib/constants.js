@@ -105,62 +105,19 @@ function parseSkillMeta(skillId, content) {
   return { name, description };
 }
 
-function generateInstallTargets(skillId, skillType) {
-  const targets = [];
-  for (const tool of TOOLS) {
-    const supportsCommand = Boolean(tool.commandDir);
-    const supportsSkill = Boolean(tool.skillDir);
-
-    if (skillType === "command") {
-      if (supportsCommand) {
-        targets.push({
-          toolId: tool.id,
-          installMode: "file",
-          conversion: null,
-          destPath: () => join(tool.commandDir(), `${skillId}.md`),
-        });
-      } else if (supportsSkill) {
-        targets.push({
-          toolId: tool.id,
-          installMode: "dir",
-          conversion: "command-to-skill",
-          destPath: () => join(tool.skillDir(), skillId),
-        });
-      }
-    } else if (skillType === "skill") {
-      if (supportsSkill) {
-        targets.push({
-          toolId: tool.id,
-          installMode: "dir",
-          conversion: null,
-          destPath: () => join(tool.skillDir(), skillId),
-        });
-      } else if (supportsCommand) {
-        targets.push({
-          toolId: tool.id,
-          installMode: "file",
-          conversion: "skill-to-command",
-          destPath: () => join(tool.commandDir(), `${skillId}.md`),
-        });
-      }
-    }
-  }
-  return targets;
+function generateInstallTargets(skillId) {
+  return TOOLS.filter(tool => tool.skillDir).map(tool => ({
+    toolId: tool.id,
+    installMode: "dir",
+    destPath: () => join(tool.skillDir(), skillId),
+  }));
 }
 
-let skillsRoot = null;
-
-export function discoverSkills(packageDir = skillsRoot || getPackageDir()) {
+export function discoverSkills(packageDir = getPackageDir()) {
   const skills = [];
-
-  const typeDirs = [
-    { dir: "commands", type: "command" },
-    { dir: "skills", type: "skill" },
-  ];
-
   const seenIds = new Set();
 
-  for (const { dir, type } of typeDirs) {
+  for (const dir of ["skills", "commands"]) {
     const typePath = join(packageDir, dir);
     if (!existsSync(typePath) || !lstatSync(typePath).isDirectory()) continue;
 
@@ -174,7 +131,7 @@ export function discoverSkills(packageDir = skillsRoot || getPackageDir()) {
       const skillId = entry;
 
       if (seenIds.has(skillId)) {
-        console.warn(`[luminae-helper] 警告：skillId "${skillId}" 在 commands/ 和 skills/ 中重复，仅使用 commands/ 下的条目`);
+        console.warn(`[luminae-helper] 警告：skillId "${skillId}" 在 commands/ 和 skills/ 中重复，优先使用 skills/ 下的条目`);
         continue;
       }
       seenIds.add(skillId);
@@ -186,8 +143,8 @@ export function discoverSkills(packageDir = skillsRoot || getPackageDir()) {
         id: skillId,
         name,
         description,
-        type,
-        installTargets: generateInstallTargets(skillId, type),
+        sourceDir: skillPath,
+        installTargets: generateInstallTargets(skillId),
       });
     }
   }
@@ -198,9 +155,7 @@ export function discoverSkills(packageDir = skillsRoot || getPackageDir()) {
 export const SKILLS = discoverSkills();
 
 export function setSkillsSource(root) {
-  const skills = discoverSkills(root);
-  skillsRoot = root;
-  SKILLS.splice(0, SKILLS.length, ...skills);
+  SKILLS.splice(0, SKILLS.length, ...discoverSkills(root));
 }
 
 export function discoverInstalledSkills(tools = TOOLS) {
@@ -219,8 +174,8 @@ export function discoverInstalledSkills(tools = TOOLS) {
         const id = mode === "file" ? entry.slice(0, -3) : entry;
         // A command and a skill with the same id may both be installed in one tool.
         const key = `${mode}:${id}`;
-        if (!found.has(key)) found.set(key, { id: key, ...parseSkillMeta(id, content), type: mode === "file" ? "command" : "skill", installTargets: [] });
-        found.get(key).installTargets.push({ toolId: tool.id, installMode: mode, conversion: null, destPath: () => dest });
+        if (!found.has(key)) found.set(key, { id: key, ...parseSkillMeta(id, content), legacyCommand: mode === "file", installTargets: [] });
+        found.get(key).installTargets.push({ toolId: tool.id, installMode: mode, destPath: () => dest });
       }
     }
   }
@@ -236,13 +191,4 @@ export function detectInstalledTools() {
     ...tool,
     installed: commandExists(tool.command),
   }));
-}
-
-export function getSkillSourcePath(skillId) {
-  const skill = SKILLS.find(s => s.id === skillId);
-  if (!skill) {
-    throw new Error(`Unknown skillId: "${skillId}" — not found in discovered skills`);
-  }
-  const subDir = skill.type === "command" ? "commands" : "skills";
-  return join(skillsRoot || getPackageDir(), subDir, skillId);
 }

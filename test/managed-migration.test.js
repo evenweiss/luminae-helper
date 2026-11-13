@@ -34,7 +34,7 @@ const managed = [
   ["BOM and CRLF", "\uFEFF" + fm("managed-by: luminae-helper").replaceAll("\n", "\r\n")],
 ];
 
-describe.each(["dir", "file"])("managed migration (%s)", mode => {
+describe("managed Skill migration", () => {
   let root, dest, source, skill, tool;
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "managed-migration-"));
@@ -43,16 +43,16 @@ describe.each(["dir", "file"])("managed migration (%s)", mode => {
     writeFileSync(source, fm("description: source\nmetadata:\n  note: keep"));
     setSkillsSource(join(root, "source"));
     tool = { id: "fixture", skillDir: () => join(root, "skills"), commandDir: () => join(root, "commands") };
-    dest = mode === "dir" ? join(tool.skillDir(), "demo") : join(tool.commandDir(), "demo.md");
-    skill = { ...SKILLS[0], installTargets: [{ toolId: tool.id, installMode: mode, destPath: () => dest }] };
+    dest = join(tool.skillDir(), "demo");
+    skill = { ...SKILLS[0], installTargets: [{ toolId: tool.id, installMode: "dir", destPath: () => dest }] };
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
-  const contentFile = dest => mode === "dir" ? join(dest, "SKILL.md") : dest;
+  const contentFile = dest => join(dest, "SKILL.md");
   function put(text) {
     const file = contentFile(dest);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);
-    if (mode === "dir") writeFileSync(join(dest, "user.txt"), "user sentinel");
+    writeFileSync(join(dest, "user.txt"), "user sentinel");
   }
 
   it.each(unmanaged)("preserves %s during discovery/install/uninstall", (_, text) => {
@@ -62,7 +62,7 @@ describe.each(["dir", "file"])("managed migration (%s)", mode => {
     expect(installSkillToTool(skill, tool).success).toBe(false);
     expect(uninstallSkillFromTool(skill, tool).success).toBe(false);
     expect(readFileSync(contentFile(dest), "utf8")).toBe(text);
-    if (mode === "dir") expect(readFileSync(join(dest, "user.txt"), "utf8")).toBe("user sentinel");
+    expect(readFileSync(join(dest, "user.txt"), "utf8")).toBe("user sentinel");
   });
 
   it.each(managed)("updates and removes %s without changing source", (_, text) => {
@@ -123,12 +123,12 @@ describe.each(["dir", "file"])("managed migration (%s)", mode => {
     writeFileSync(source, text);
     expect(installSkillToTool(skill, tool).success).toBe(false);
     expect(readFileSync(contentFile(dest), "utf8")).toBe(original);
-    if (mode === "dir") expect(readFileSync(join(dest, "user.txt"), "utf8")).toBe("user sentinel");
+    expect(readFileSync(join(dest, "user.txt"), "utf8")).toBe("user sentinel");
   });
 
   it.each([false, true])("preserves foreign symbolic links (dangling=%s)", dangling => {
     const outside = join(root, "outside");
-    const outsideFile = mode === "dir" ? join(outside, "SKILL.md") : outside;
+    const outsideFile = join(outside, "SKILL.md");
     if (!dangling) {
       mkdirSync(dirname(outsideFile), { recursive: true });
       writeFileSync(outsideFile, fm("managed-by: luminae-helper"));
@@ -142,18 +142,16 @@ describe.each(["dir", "file"])("managed migration (%s)", mode => {
     if (!dangling) expect(readFileSync(outsideFile, "utf8")).toBe(fm("managed-by: luminae-helper"));
   });
 
-  if (mode === "dir") {
-    it("preserves directory with a linked SKILL.md", () => {
-      const outside = join(root, "outside.md");
-      writeFileSync(outside, fm("managed-by: luminae-helper"));
-      mkdirSync(dest, { recursive: true });
-      symlinkSync(outside, join(dest, "SKILL.md"));
-      expect(discoverInstalledSkills([tool])).toEqual([]);
-      expect(installSkillToTool(skill, tool).success).toBe(false);
-      expect(uninstallSkillFromTool(skill, tool).success).toBe(false);
-      expect(lstatSync(join(dest, "SKILL.md")).isSymbolicLink()).toBe(true);
-    });
-  }
+  it("preserves directory with a linked SKILL.md", () => {
+    const outside = join(root, "outside.md");
+    writeFileSync(outside, fm("managed-by: luminae-helper"));
+    mkdirSync(dest, { recursive: true });
+    symlinkSync(outside, join(dest, "SKILL.md"));
+    expect(discoverInstalledSkills([tool])).toEqual([]);
+    expect(installSkillToTool(skill, tool).success).toBe(false);
+    expect(uninstallSkillFromTool(skill, tool).success).toBe(false);
+    expect(lstatSync(join(dest, "SKILL.md")).isSymbolicLink()).toBe(true);
+  });
 
   it("does not delete pre-existing adjacent staging or backup content", () => {
     for (const suffix of [".__tmp__", ".__bak__"]) {
@@ -163,5 +161,30 @@ describe.each(["dir", "file"])("managed migration (%s)", mode => {
     expect(installSkillToTool(skill, tool).success).toBe(true);
     expect(installSkillToTool(skill, tool).success).toBe(true);
     for (const suffix of [".__tmp__", ".__bak__"]) expect(readFileSync(join(dest + suffix, "mine.txt"), "utf8")).toBe("keep adjacent");
+  });
+});
+
+
+describe("legacy command discovery and uninstall", () => {
+  let root, tool, command;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "legacy-uninstall-"));
+    tool = { id: "fixture", commandDir: () => root };
+    command = join(root, "demo.md");
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it.each(managed)("removes %s from the old layout", (_, text) => {
+    writeFileSync(command, text);
+    const [entry] = discoverInstalledSkills([tool]);
+    expect(entry.legacyCommand).toBe(true);
+    expect(uninstallSkillFromTool(entry, tool).success).toBe(true);
+    expect(existsSync(command)).toBe(false);
+  });
+
+  it.each(unmanaged)("does not claim %s in the old layout", (_, text) => {
+    writeFileSync(command, text);
+    expect(discoverInstalledSkills([tool])).toEqual([]);
+    expect(readFileSync(command, "utf8")).toBe(text);
   });
 });

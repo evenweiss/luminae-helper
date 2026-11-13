@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^compact$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"${PLUGIN_ROOT}/skills/ai-development-workflow/scripts/codex_compact.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
