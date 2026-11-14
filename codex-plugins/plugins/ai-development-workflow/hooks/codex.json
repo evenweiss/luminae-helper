@@ -11,6 +11,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__codex_app__(send_message_to_thread|create_thread|fork_thread|handoff_thread)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"${PLUGIN_ROOT}/skills/ai-development-workflow/scripts/codex_dispatch.py\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
