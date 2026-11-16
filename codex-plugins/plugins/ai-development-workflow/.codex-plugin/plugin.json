@@ -1,6 +1,6 @@
 {
   "name": "ai-development-workflow",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "AI 协作开发流程，支持统筹压缩续接和按任务启用的只读与派单校验。",
   "skills": "./skills/",
   "hooks": "./hooks/codex.json",
