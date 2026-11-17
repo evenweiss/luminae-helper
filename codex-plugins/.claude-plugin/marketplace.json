@@ -1,0 +1,13 @@
+{
+  "name": "luminae-helper",
+  "owner": {
+    "name": "Luminae Helper"
+  },
+  "plugins": [
+    {
+      "name": "ai-development-workflow",
+      "source": "./plugins/ai-development-workflow"
+    }
+  ],
+  "description": "Luminae Helper 随包分发的插件"
+}
