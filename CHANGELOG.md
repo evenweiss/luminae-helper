@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3
+
+- 随包分发 ai-development-workflow 0.9.2。明确阶段结果后的统筹续接、必要的用户操作请求及等待回复和受阻收口条件。
+
 ## 1.3.2
 
 - 随包分发 ai-development-workflow 0.9.1。Codex 审查弹窗显示「校验派单回传安排」和「压缩后恢复统筹上下文」。
