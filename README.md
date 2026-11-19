@@ -36,7 +36,7 @@ luminae-helper
 也可以直接安装指定技能：
 
 ```bash
-luminae-helper skill install ai-development-workflow --tool codex
+luminae-helper skill install git-flow --tool codex
 luminae-helper skill install git-push --tool claude-code
 luminae-helper skill --help
 ```
@@ -80,7 +80,6 @@ luminae-helper outdated     # 检查 npm registry 是否有新版本
 
 | 技能 ID | 用途 |
 |---------|------|
-| `ai-development-workflow` | 协调跨阶段、多工作区和多会话开发任务 |
 | `generate-refactor-docs` | 生成页面、接口和后端链路的重构文档 |
 | `git-flow` | 管理 Git Flow feature、release 和 hotfix 分支 |
 | `git-push` | 按用户授权执行提交前检查、提交和推送 |
@@ -150,7 +149,9 @@ npm test
 npm pack
 ```
 
-测试使用临时源码、Git 仓库和目标目录，不依赖本地公共技能副本。打包和 npm 安装不再触发技能下载。`commands/`、`skills/` 的旧生成目录仍被忽略，但不会进入 npm 包；旧 `sync-skills` 脚本已移除。受管插件的包和两端清单存放于 `codex-plugins/`，随 npm 包分发。更新受管插件时同步包内容和插件清单版本。
+公共技能测试使用临时源码、Git 仓库和目标目录。受管插件源码位于 ai-skills 仓库的 `plugins/ai-development-workflow/` 目录（[ai-skills 仓库](https://github.com/evenweiss/ai-skills)）。测试和打包前从同级的 `../ai-skills` 检出目录生成 `codex-plugins/`，可用 `LUMINAE_AI_SKILLS_DIR` 指定其他检出目录。发布时使用已确认的 `ai-skills` 版本。直接从 Helper 源码运行插件安装前，执行 `npm run prepare:plugins`。
+
+生成的插件包随 npm 包分发，继续使用 `ai-development-workflow@luminae-helper`，安装时无需访问 `ai-skills`。测试、打包和 npm 安装过程均无需下载公共技能。`commands/` 和 `skills/` 的旧生成目录不进入 npm 包。
 
 需要正式发布 CLI 时再执行 `npm publish`，公共技能的新 Tag 不要求 CLI 同步发版。
 

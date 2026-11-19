@@ -113,6 +113,7 @@ function readMarketplace(directory, host, catalog) {
 }
 
 function managedSource(host) {
+  if (!existsSync(managedBundle)) throw new Error("未生成受管插件包，请先运行 npm run prepare:plugins。");
   const source = readMarketplace(realpathSync(managedBundle), host, hostConfig(host).catalogs[0]);
   if (source.name !== managedName) throw new Error("Helper 的受管插件来源清单无效。");
   return source;

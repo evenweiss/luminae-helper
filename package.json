@@ -19,7 +19,10 @@
   "scripts": {
     "start": "node src/cli.js",
     "dev": "node --watch src/cli.js",
-    "test": "vitest run"
+    "prepare:plugins": "node scripts/prepare-plugins.js",
+    "pretest": "npm run prepare:plugins",
+    "test": "vitest run",
+    "prepack": "npm run prepare:plugins"
   },
   "keywords": [
     "claude",
