@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0
+
+### Changed
+
+- 从 ai-skills 生成受管的 AI 开发协作插件包，移除 Helper 仓库中的重复源码和用例。npm 安装用户继续使用 `luminae-helper plugin install ai-development-workflow --tool codex` 或对应的 Claude Code 安装命令。
+- 随包插件使用一份共享技能，更新统筹交接、操作授权和独立验收规则。插件源码同时提供 Cursor、Pi 和 Hermes Agent 的安装及续接入口。
+
+### Breaking Changes
+
+- 从 Helper 源码运行测试、打包或安装受管插件时，需要检出包含插件的 ai-skills（本版验证使用 `0.9.0`）。默认查找同级 `../ai-skills`，也可用 `LUMINAE_AI_SKILLS_DIR` 指定。直接从源码安装插件前执行 `npm run prepare:plugins`。
+- 公共目录中的 `ai-development-workflow` 已从独立 Skill 迁移为插件。现有独立 Skill 可通过原卸载入口移除，再用 `luminae-helper plugin install` 安装插件。
+
 ## 1.3.3
 
 - 随包分发 ai-development-workflow 0.9.2。明确阶段结果后的统筹续接、必要的用户操作请求及等待回复和受阻收口条件。
