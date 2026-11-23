@@ -3,10 +3,10 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
 import { withCacheLock } from "./cache-lifecycle.js";
+import { refreshPublicSource } from "./public-source.js";
 
 const exec = promisify(execFile);
 const hosts = {
@@ -25,7 +25,6 @@ function hostConfig(host) {
 const idPart = /^[a-z0-9][a-z0-9._-]*$/i;
 const usage = `用法：luminae-helper plugin install|uninstall <插件名> [--tool ${PLUGIN_HOSTS.join("|")}] [--source <本地包目录>]`;
 const managedName = "luminae-helper";
-const managedBundle = fileURLToPath(new URL("../../codex-plugins/", import.meta.url));
 const sourceMarker = ".luminae-helper-marketplace";
 const pluginMarker = ".luminae-helper-plugin";
 
@@ -133,17 +132,27 @@ function readMarketplace(directory, host, catalog) {
   return { directory, name: manifest.name, plugins };
 }
 
-function managedSource(host) {
-  if (!existsSync(managedBundle)) throw new Error("未生成受管插件包，请先运行 npm run prepare:plugins。");
-  const directory = realpathSync(managedBundle);
-  if (!hostConfig(host).catalogs) return { directory, name: managedName, plugins: scanPlugins(directory, host) };
-  const source = readMarketplace(directory, host, hostConfig(host).catalogs[0]);
-  if (source.name !== managedName) throw new Error("Helper 的受管插件来源清单无效。");
-  return source;
+// 受管插件取自技能仓库最新正式 Tag 的运行时快照（与技能共用同一份缓存）。
+function snapshotSource(host, root) {
+  if (typeof root !== "string" || !existsSync(root)) {
+    throw new Error("缺少插件来源快照，请重新运行安装以获取技能仓库的最新版本。");
+  }
+  const directory = realpathSync(root);
+  const config = hostConfig(host);
+  if (!config.catalogs) {
+    const plugins = scanPlugins(directory, host);
+    if (!plugins.length) throw new Error(`正式版本没有可安装的 ${config.label} 插件。`);
+    return { directory, name: managedName, plugins, generated: true };
+  }
+  const catalog = config.catalogs.find(file => existsSync(join(directory, file)));
+  if (!catalog) throw new Error(`正式版本没有 ${config.label} 的插件来源清单。`);
+  const source = readMarketplace(directory, host, catalog);
+  if (!source.plugins.length) throw new Error(`正式版本没有可安装的 ${config.label} 插件。`);
+  return { ...source, name: managedName, generated: true };
 }
 
-export function listManagedPlugins(host = "codex") {
-  return managedSource(host).plugins;
+export function listManagedPlugins(host = "codex", root) {
+  return snapshotSource(host, root).plugins;
 }
 
 export function readLocalPluginSource(sourceDir, host = "codex") {
@@ -183,7 +192,19 @@ function publishSource(source, destination, host) {
   const previous = join(staging, "previous");
   let preserveBackup = false;
   try {
-    if (source.standalone) {
+    if (source.generated) {
+      mkdirSync(join(prepared, "plugins"), { recursive: true });
+      for (const plugin of source.plugins) {
+        copyPackage(plugin.dir, join(prepared, "plugins", plugin.name));
+      }
+      const entries = source.plugins.map(plugin => ({ name: plugin.name, source: `./plugins/${plugin.name}` }));
+      const manifest = host === "claude-code"
+        ? { name: source.name, owner: { name: "Luminae Helper" }, plugins: entries }
+        : { name: source.name, plugins: entries.map(entry => ({ ...entry, source: { source: "local", path: entry.source } })) };
+      const file = join(prepared, hostConfig(host).catalogs[0]);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
+    } else if (source.standalone) {
       const plugin = source.plugins[0];
       const packagePath = `plugins/${plugin.name}`;
       mkdirSync(join(prepared, "plugins"), { recursive: true });
@@ -325,11 +346,11 @@ async function installFromSource(name, source, host) {
   }
 }
 
-export async function installPlugin(name, sourceDir, host = "codex") {
+export async function installPlugin(name, sourceDir, host = "codex", snapshotRoot) {
   hostConfig(host);
   if (typeof name !== "string" || !idPart.test(name)) throw new Error("请只指定插件名，无需附加来源名。");
   const managed = sourceDir === undefined;
-  const source = managed ? managedSource(host) : readLocalPluginSource(sourceDir, host);
+  const source = managed ? snapshotSource(host, snapshotRoot) : readLocalPluginSource(sourceDir, host);
   if (!source.plugins.some(plugin => plugin.name === name)) {
     if (!managed) throw new Error(`本地来源 ${source.directory} 没有可安装的 ${name}。`);
     throw new Error(`${name} 不在 Helper 的受管清单。可安装：${source.plugins.map(plugin => plugin.name).join("、")}。本地包可使用 --source。`);
@@ -420,6 +441,7 @@ export async function runPluginCommand(args) {
   }
   const [action, name, ...flags] = args;
   if (!["install", "uninstall"].includes(action) || !name || flags.length % 2) throw new Error(usage);
+  if (!idPart.test(name)) throw new Error("请只指定插件名，无需附加来源名。");
   const options = {};
   for (let i = 0; i < flags.length; i += 2) {
     const [flag, value] = [flags[i], flags[i + 1]];
@@ -435,5 +457,15 @@ export async function runPluginCommand(args) {
     console.log(`  已卸载 ${hostConfig(host).label} 插件 ${name}`);
     return;
   }
-  printPluginResult(await installPlugin(name, options["--source"], host), host);
+  if (options["--source"]) {
+    printPluginResult(await installPlugin(name, options["--source"], host), host);
+    return;
+  }
+  const snapshot = await refreshPublicSource();
+  try {
+    printPluginResult(await installPlugin(name, undefined, host, snapshot.root), host);
+    console.log(`  插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`);
+  } finally {
+    await snapshot.release();
+  }
 }

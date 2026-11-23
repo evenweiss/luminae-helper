@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-const native = vi.hoisted(() => ({ run: vi.fn(), home: "" }));
+const native = vi.hoisted(() => ({ run: vi.fn(), home: "", snapshot: "" }));
+vi.mock("../src/lib/public-source.js", () => ({
+  refreshPublicSource: async () => ({ root: native.snapshot, tag: "0.1.0", commit: "a".repeat(40), release: async () => {} }),
+}));
 vi.mock("node:os", async original => ({ ...await original(), homedir: () => native.home }));
 vi.mock("node:child_process", () => ({
   execFile: Object.assign(() => {}, { [Symbol.for("nodejs.util.promisify.custom")]: native.run }),
@@ -25,6 +28,30 @@ function manifest(name = "local") {
     ],
   });
 }
+function buildSnapshot(dir) {
+  const plugin = join(dir, "plugins", "ai-development-workflow");
+  for (const manifest of [".codex-plugin", ".claude-plugin", ".cursor-plugin"]) {
+    put(join(plugin, manifest, "plugin.json"), { name: "ai-development-workflow", version: "0.10.2" });
+  }
+  writeFileSync(join(plugin, "plugin.yaml"), "name: ai-development-workflow\nversion: 0.10.2\n");
+  put(join(plugin, "package.json"), { name: "ai-development-workflow", version: "0.10.2", pi: {} });
+  for (const hook of ["hooks.json", "cursor.json"]) {
+    mkdirSync(join(plugin, "hooks"), { recursive: true });
+    writeFileSync(join(plugin, "hooks", hook), "{}");
+  }
+  mkdirSync(join(plugin, "skills", "ai-development-workflow"), { recursive: true });
+  writeFileSync(join(plugin, "skills", "ai-development-workflow", "SKILL.md"), "---\nname: ai-development-workflow\ndescription: fixture\n---\n");
+  put(join(dir, ".agents/plugins/marketplace.json"), {
+    name: "ai-skills",
+    plugins: [{ name: "ai-development-workflow", source: { source: "local", path: "./plugins/ai-development-workflow" } }],
+  });
+  put(join(dir, ".claude-plugin/marketplace.json"), {
+    name: "ai-skills", owner: { name: "Fixture" },
+    plugins: [{ name: "ai-development-workflow", source: "./plugins/ai-development-workflow" }],
+  });
+  return dir;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   root = realpathSync(mkdtempSync(join(tmpdir(), "plugin source ")));
@@ -33,6 +60,7 @@ beforeEach(() => {
   manifest();
   put(join(sourceDir, "plugins/workflow/.codex-plugin/plugin.json"), { name: "workflow", version: "1.2.3" });
   mkdirSync(join(root, "outside"));
+  native.snapshot = buildSnapshot(join(root, "snapshot"));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -40,12 +68,12 @@ function reply(value) {
   native.run.mockResolvedValueOnce({ stdout: JSON.stringify(value) });
 }
 
-it("lists only bundled plugins without querying Codex's configured marketplaces", () => {
-  expect(listManagedPlugins().map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
+it("lists only snapshot plugins without querying Codex's configured marketplaces", () => {
+  expect(listManagedPlugins("codex", native.snapshot).map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
   expect(native.run).not.toHaveBeenCalled();
 });
 
-it("installs a managed name from the bundled source on a fresh profile", async () => {
+it("installs a managed name from the snapshot on a fresh profile", async () => {
   native.run.mockImplementation(async (_, args) => {
     if (args[1] === "marketplace") {
       expect(existsSync(join(args[3], "plugins/ai-development-workflow/hooks/hooks.json"))).toBe(true);
@@ -54,12 +82,12 @@ it("installs a managed name from the bundled source on a fresh profile", async (
     expect(args).toEqual(["plugin", "add", "ai-development-workflow@luminae-helper", "--json"]);
     return { stdout: JSON.stringify({ pluginId: "ai-development-workflow@luminae-helper" }) };
   });
-  await expect(installPlugin("ai-development-workflow")).resolves.toMatchObject({ pluginId: "ai-development-workflow@luminae-helper" });
+  await expect(installPlugin("ai-development-workflow", undefined, "codex", native.snapshot)).resolves.toMatchObject({ pluginId: "ai-development-workflow@luminae-helper" });
   expect(native.run).toHaveBeenCalledTimes(2);
 });
 
 it("rejects third-party names and qualified selectors without an explicit local package", async () => {
-  await expect(installPlugin("workflow")).rejects.toThrow("不在 Helper 的受管清单");
+  await expect(installPlugin("workflow", undefined, "codex", native.snapshot)).rejects.toThrow("不在 Helper 的受管清单");
   await expect(runPluginCommand(["install", "workflow@local"])).rejects.toThrow("插件名");
   expect(native.run).not.toHaveBeenCalled();
   expect(existsSync(native.home)).toBe(false);
@@ -148,11 +176,24 @@ it("rejects duplicate or unsupported tool options before invoking any host", asy
   expect(native.run).not.toHaveBeenCalled();
 });
 
+it("rejects a managed install when no snapshot is supplied", async () => {
+  expect(() => listManagedPlugins("codex")).toThrow("缺少插件来源快照");
+  await expect(installPlugin("ai-development-workflow", undefined, "codex")).rejects.toThrow("缺少插件来源快照");
+});
+
+it("refreshes the public source for a managed CLI install", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try { await runPluginCommand(["install", "ai-development-workflow", "--tool", "cursor"]); }
+  finally { log.mockRestore(); }
+  expect(existsSync(join(native.home, ".cursor/plugins/local/ai-development-workflow/.cursor-plugin/plugin.json"))).toBe(true);
+  expect(native.run).not.toHaveBeenCalled();
+});
+
 // ── 目录宿主：Cursor / Hermes Agent / Pi ──
 
 it("lists the managed plugin for every plugin host", () => {
   for (const host of ["cursor", "hermes-agent", "pi"]) {
-    expect(listManagedPlugins(host).map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
+    expect(listManagedPlugins(host, native.snapshot).map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
   }
 });
 
@@ -165,7 +206,7 @@ it("reads a standalone Cursor plugin directory", () => {
 });
 
 it("installs a managed plugin for Cursor into its local plugin directory", async () => {
-  await expect(installPlugin("ai-development-workflow", undefined, "cursor"))
+  await expect(installPlugin("ai-development-workflow", undefined, "cursor", native.snapshot))
     .resolves.toMatchObject({ pluginId: "ai-development-workflow", version: "0.10.2" });
   const dest = join(native.home, ".cursor/plugins/local/ai-development-workflow");
   expect(existsSync(join(dest, ".cursor-plugin/plugin.json"))).toBe(true);
@@ -176,7 +217,7 @@ it("installs a managed plugin for Cursor into its local plugin directory", async
 
 it("refuses to overwrite a Cursor plugin it does not manage", async () => {
   mkdirSync(join(native.home, ".cursor/plugins/local/ai-development-workflow"), { recursive: true });
-  await expect(installPlugin("ai-development-workflow", undefined, "cursor")).rejects.toThrow("不属于 Luminae Helper");
+  await expect(installPlugin("ai-development-workflow", undefined, "cursor", native.snapshot)).rejects.toThrow("不属于 Luminae Helper");
 });
 
 it("installs and enables a managed plugin for Hermes Agent", async () => {
@@ -185,7 +226,7 @@ it("installs and enables a managed plugin for Hermes Agent", async () => {
     if (args[1] === "show") return { stdout: "ai-development-workflow v0.10.2\nStatus: enabled\n" };
     throw new Error(`unexpected ${args.join(" ")}`);
   });
-  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent"))
+  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent", native.snapshot))
     .resolves.toMatchObject({ pluginId: "ai-development-workflow" });
   expect(existsSync(join(native.home, ".hermes/plugins/ai-development-workflow/plugin.yaml"))).toBe(true);
   expect(native.run.mock.calls.map(([, args]) => args)).toEqual([
@@ -196,7 +237,7 @@ it("installs and enables a managed plugin for Hermes Agent", async () => {
 
 it("reports a Hermes plugin that did not enable", async () => {
   native.run.mockImplementation(async (_, args) => ({ stdout: args[1] === "show" ? "Status: disabled" : "" }));
-  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent")).rejects.toThrow("未确认启用");
+  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent", native.snapshot)).rejects.toThrow("未确认启用");
 });
 
 it("installs a managed package for Pi and verifies the settings entry", async () => {
@@ -210,7 +251,7 @@ it("installs a managed package for Pi and verifies the settings entry", async ()
     }));
     return { stdout: "" };
   });
-  await expect(installPlugin("ai-development-workflow", undefined, "pi"))
+  await expect(installPlugin("ai-development-workflow", undefined, "pi", native.snapshot))
     .resolves.toMatchObject({ pluginId: "ai-development-workflow", version: "0.10.2" });
   expect(existsSync(join(dest, "package.json"))).toBe(true);
 });
@@ -219,7 +260,7 @@ it("reports a Pi package missing from Pi settings", async () => {
   mkdirSync(join(native.home, ".pi/agent"), { recursive: true });
   writeFileSync(join(native.home, ".pi/agent/settings.json"), JSON.stringify({ packages: [] }));
   native.run.mockResolvedValueOnce({ stdout: "" });
-  await expect(installPlugin("ai-development-workflow", undefined, "pi")).rejects.toThrow("未登记");
+  await expect(installPlugin("ai-development-workflow", undefined, "pi", native.snapshot)).rejects.toThrow("未登记");
 });
 
 // ── 插件卸载 ──

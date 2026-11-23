@@ -84,11 +84,13 @@ it.each([true, false])("uses the shared plugin installer only after interactive 
     .mockResolvedValueOnce(confirm ? "confirm" : "back").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(source.refreshPublicSource).not.toHaveBeenCalled();
-  if (confirm) expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith(selected.name, "/fixture/local source", "codex");
+  if (confirm) expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith(selected.name, "/fixture/local source", "codex", undefined);
   else expect(plugins.installPlugin).not.toHaveBeenCalled();
 });
 
 it("offers only the Helper catalog when no local source is supplied", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listManagedPlugins.mockReturnValue([{ name: "ai-development-workflow" }]);
   prompts.checkbox.mockResolvedValueOnce(["codex"]).mockResolvedValueOnce(["ai-development-workflow"]);
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
@@ -96,28 +98,33 @@ it("offers only the Helper catalog when no local source is supplied", async () =
   const selection = prompts.checkbox.mock.calls.find(([config]) => config.message === "选择 Codex 插件:")[0];
   expect(selection.choices.filter(choice => choice.value && !choice.value.startsWith("__"))
     .map(choice => choice.value)).toEqual(["ai-development-workflow"]);
-  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "codex");
+  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "codex", snapshot.root);
+  expect(snapshot.release).toHaveBeenCalled();
   expect(plugins.readLocalPluginSource).not.toHaveBeenCalled();
 });
 
 it("selects the Claude Code catalog and installs in the selected host", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listManagedPlugins.mockReturnValue([{ name: "ai-development-workflow" }]);
   prompts.checkbox.mockResolvedValueOnce(["claude-code"]).mockResolvedValueOnce(["ai-development-workflow"]);
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
-  expect(plugins.listManagedPlugins).toHaveBeenCalledExactlyOnceWith("claude-code");
-  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "claude-code");
+  expect(plugins.listManagedPlugins).toHaveBeenCalledExactlyOnceWith("claude-code", snapshot.root);
+  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "claude-code", snapshot.root);
 });
 
 it("installs every selected plugin into every selected host", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listManagedPlugins.mockReturnValue([{ name: "a", version: "1.0.0" }, { name: "b", version: "2.0.0" }]);
   plugins.installPlugin.mockImplementation((name, _source, host) => Promise.resolve({ pluginId: `${name}@luminae-helper`, version: `${host}-${name}` }));
   prompts.checkbox.mockResolvedValueOnce(["codex", "claude-code"]).mockResolvedValueOnce(["a", "b"]);
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin.mock.calls).toEqual([
-    ["a", undefined, "codex"], ["b", undefined, "codex"],
-    ["a", undefined, "claude-code"], ["b", undefined, "claude-code"],
+    ["a", undefined, "codex", snapshot.root], ["b", undefined, "codex", snapshot.root],
+    ["a", undefined, "claude-code", snapshot.root], ["b", undefined, "claude-code", snapshot.root],
   ]);
   const resultTable = console.log.mock.calls.map(([line]) => String(line)).join("\n");
   expect(resultTable).toContain("安装结果");

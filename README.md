@@ -45,7 +45,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。留空使用 Helper 的受管清单，五个插件宿主都提供 `ai-development-workflow`。输入本地插件目录可安装该宿主兼容的外部包。命令行仍按单个插件、单个宿主执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。留空使用技能仓库最新正式 Tag 里的插件清单（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。输入本地插件目录可安装该宿主兼容的外部包。命令行仍按单个插件、单个宿主执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex
@@ -164,7 +164,7 @@ npm test
 npm pack
 ```
 
-技能测试使用临时源码、Git 仓库和目标目录。受管插件源码位于 ai-skills 仓库的 `plugins/ai-development-workflow/` 目录（[ai-skills 仓库](https://github.com/evenweiss/ai-skills)）。测试和打包前从同级的 `../ai-skills` 检出目录生成 `codex-plugins/`，可用 `LUMINAE_AI_SKILLS_DIR` 指定其他检出目录。发布时使用已确认的 `ai-skills` 版本。直接从 Helper 源码运行插件安装前，执行 `npm run prepare:plugins`。
+技能测试使用临时源码、Git 仓库和目标目录；插件测试使用内置 fixture 快照目录。受管插件源码位于 ai-skills 仓库的 `plugins/` 目录（[ai-skills 仓库](https://github.com/evenweiss/ai-skills)），安装时从最新正式 Tag 的快照读取，不再随包分发，也不需要预生成。
 
 生成的插件包随 npm 包分发，继续使用 `ai-development-workflow@luminae-helper`，安装时无需访问 `ai-skills`。测试、打包和 npm 安装过程均无需下载技能。`commands/` 和 `skills/` 的旧生成目录不进入 npm 包。
 

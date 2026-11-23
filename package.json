@@ -11,17 +11,13 @@
     "src/index.js",
     "src/lib/*.js",
     "src/utils/*.js",
-    "codex-plugins/",
     "README.md",
     "CHANGELOG.md"
   ],
   "scripts": {
     "start": "node src/cli.js",
     "dev": "node --watch src/cli.js",
-    "prepare:plugins": "node scripts/prepare-plugins.js",
-    "pretest": "npm run prepare:plugins",
-    "test": "vitest run",
-    "prepack": "npm run prepare:plugins"
+    "test": "vitest run"
   },
   "keywords": [
     "claude",
