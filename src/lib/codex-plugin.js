@@ -391,8 +391,21 @@ function hostPluginNames(host) {
     .map(entry => entry.name);
 }
 
+function installedPluginDirectory(host, name) {
+  const { target } = hostConfig(host);
+  if (target) return join(target(), name);
+  return join(homedir(), ".local", "share", "luminae-helper", `${host}-marketplaces`, managedName, "plugins", name);
+}
+
 export function listInstalledPlugins(host = "codex") {
-  return hostPluginNames(host).map(name => ({ name }));
+  return hostPluginNames(host).map((name) => {
+    try {
+      const { version } = readPackage(installedPluginDirectory(host, name), host);
+      return { name, version };
+    } catch {
+      return { name };
+    }
+  });
 }
 
 export async function uninstallPlugin(name, host = "codex") {

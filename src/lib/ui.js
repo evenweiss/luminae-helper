@@ -6,6 +6,7 @@ import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
+import { collectInstalled } from "./inventory.js";
 import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, readLocalPluginSource, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
 
 /**
@@ -99,11 +100,9 @@ function padCell(text, width) {
   return value + " ".repeat(Math.max(0, width - displayWidth(value)));
 }
 
-function printResultTable(title, rows) {
-  if (rows.length === 0) return;
+function printTable(title, headers, data) {
+  if (data.length === 0) return;
 
-  const headers = ["工具", "内容", "状态", "安装方式"];
-  const data = rows.map(row => [row.toolName, row.skillName, row.status, row.mode]);
   const widths = headers.map((header, idx) => Math.max(displayWidth(header), ...data.map(row => displayWidth(row[idx]))));
   const gap = "  ";
   const formatRow = (cells) => TERM_GUTTER + cells.map((cell, idx) => padCell(cell, widths[idx])).join(gap);
@@ -111,10 +110,27 @@ function printResultTable(title, rows) {
   console.log(chalk.cyan.bold(TERM_GUTTER + title));
   console.log(formatRow(headers.map(header => chalk.gray(header))));
   console.log(TERM_GUTTER + widths.map(width => chalk.gray("─".repeat(width))).join(gap));
-  for (const row of rows) {
-    console.log(formatRow([row.toolName, row.skillName, row.status, row.mode]));
+  for (const row of data) {
+    console.log(formatRow(row));
   }
   console.log();
+}
+
+function printResultTable(title, rows) {
+  printTable(title, ["工具", "内容", "状态", "安装方式"],
+    rows.map(row => [row.toolName, row.skillName, row.status, row.mode]));
+}
+
+export function printInstalledContent() {
+  const { rows, source } = collectInstalled();
+  if (rows.length === 0) {
+    console.log(TERM_GUTTER + "没有检测到 Helper 管理的技能或插件。");
+  } else {
+    printTable("已安装内容", ["类型", "工具", "条目", "版本"],
+      rows.map(row => [row.type, row.tool, row.name, row.version]));
+  }
+  if (source) console.log(chalk.gray(TERM_GUTTER + `技能来源快照：${source.tag} · ${source.commit.slice(0, 7)}`));
+  return rows;
 }
 
 function mergeResultRows(...rowGroups) {
@@ -778,6 +794,7 @@ export async function runInteractive() {
         choices: [
           { name: padChoice(" 安装 / 更新", 20), value: "install" },
           { name: padChoice(" 卸载", 20), value: "uninstall" },
+          { name: padChoice(" 查看已安装", 20), value: "list" },
           { name: padChoice(" 退出", 20), value: "exit" },
         ],
         theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
@@ -786,6 +803,15 @@ export async function runInteractive() {
 
     if (action === "exit") {
       break;
+    }
+
+    if (action === "list") {
+      await afterPromptFlush();
+      printBanner();
+      printSectionTitle("━━━ 已安装内容 ━━━");
+      printInstalledContent();
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      continue;
     }
 
     await afterPromptFlush();

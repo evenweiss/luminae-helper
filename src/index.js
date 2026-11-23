@@ -1,6 +1,7 @@
 const usage = `用法：luminae-helper [命令]
 
   （无命令）                    交互式安装 / 更新 / 卸载
+  list                          查看已安装的技能与插件
   outdated                      检查工具与技能仓库更新
   skill install <技能ID> --tool <宿主ID>
   skill --help
@@ -37,6 +38,12 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   if (argv[0] === "outdated") {
     await checkOutdated();
+    return 0;
+  }
+
+  if (argv[0] === "list") {
+    const { printInstalledContent } = await import("./lib/ui.js");
+    printInstalledContent();
     return 0;
   }
 

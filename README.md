@@ -79,11 +79,16 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 安装时，目标宿主已有非本工具管理的同名技能或旧命令文件会跳过并说明冲突。更新受管旧命令时，成功安装技能后才移除旧文件。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
 
+### 查看已安装
+
+主菜单选「查看已安装」，或直接运行 `luminae-helper list`。按宿主列出 Helper 管理的技能与插件，插件带版本；技能源码没有版本字段，版本列显示 `—`。末尾显示最近一次技能来源快照。
+
 ### 其他命令
 
 ```bash
 luminae-helper --version    # 查看版本
-luminae-helper outdated     # 检查 npm registry 是否有新版本
+luminae-helper outdated     # 检查 npm registry 与技能仓库是否有更新
+luminae-helper --help       # 查看用法
 ```
 
 ### 退出

@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const ui = vi.hoisted(() => ({ runInteractive: vi.fn(), TERM_GUTTER: "  " }));
+const ui = vi.hoisted(() => ({ runInteractive: vi.fn(), printInstalledContent: vi.fn(), TERM_GUTTER: "  " }));
 const plugins = vi.hoisted(() => ({ runPluginCommand: vi.fn() }));
 vi.mock("../src/lib/codex-plugin.js", () => plugins);
 const version = vi.hoisted(() => ({ printVersion: vi.fn(), checkOutdated: vi.fn() }));
@@ -24,6 +24,14 @@ it("prints help and rejects unknown commands without opening the menu", async ()
     expect(await api.runCli(["foo"])).toBe(1);
     expect(error.mock.calls.flat().join("\n")).toContain("未知命令");
   } finally { log.mockRestore(); error.mockRestore(); }
+  expect(ui.runInteractive).not.toHaveBeenCalled();
+});
+
+it("lists installed content without launching the interactive menu", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try { expect(await api.runCli(["list"])).toBe(0); }
+  finally { log.mockRestore(); }
+  expect(ui.printInstalledContent).toHaveBeenCalledOnce();
   expect(ui.runInteractive).not.toHaveBeenCalled();
 });
 
