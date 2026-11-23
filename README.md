@@ -45,7 +45,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，再选宿主。留空使用 Helper 的受管清单，五个插件宿主都提供 `ai-development-workflow`。输入本地插件目录可安装该宿主兼容的外部包。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。留空使用 Helper 的受管清单，五个插件宿主都提供 `ai-development-workflow`。输入本地插件目录可安装该宿主兼容的外部包。命令行仍按单个插件、单个宿主执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex

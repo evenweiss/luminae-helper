@@ -6,7 +6,7 @@ import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
-import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, readLocalPluginSource, installPlugin, uninstallPlugin, printPluginResult } from "./codex-plugin.js";
+import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, readLocalPluginSource, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
@@ -597,41 +597,110 @@ async function runInteractivePluginInstall() {
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
-  const host = await pick({
-    message: "选择插件宿主:",
-    choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
-  });
-  if (host === "__back__") return "back";
-  if (host === "__exit__") return "exit";
-  const { name: hostName } = tools.find(tool => tool.id === host);
-  const sourceDir = (await input({ message: "本地插件目录（留空使用 Helper 受管插件）:" }, inquirerContext)).trim();
-  try {
-    const local = sourceDir ? readLocalPluginSource(sourceDir, host) : null;
-    const plugins = local ? local.plugins : listManagedPlugins(host);
-    if (!plugins.length) throw new Error("当前来源没有可安装的插件。");
-    while (true) {
-      const selected = await pick({
-        message: `选择 ${hostName} 插件:`,
-        choices: withNavChoices(plugins.map(plugin => ({
-          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
-          value: plugin.name,
-        })), "↩ 返回主菜单"),
-      });
-      if (selected === "__back__") return "back";
-      if (selected === "__exit__") return "exit";
-      const confirmation = await pick({
-        message: `安装 ${selected} 到 ${hostName}${local ? `（本地 ${local.directory}）` : "（Helper 受管）"}？`,
-        choices: [
-          { name: "返回上一步", value: "back" },
-          { name: "确认安装", value: "confirm" },
-          { name: "退出", value: "exit" },
-        ],
-      });
-      if (confirmation === "back") continue;
-      if (confirmation !== "confirm") return "exit";
-      printPluginResult(await installPlugin(selected, local?.directory, host), host);
-      break;
+  const toolById = new Map(tools.map(tool => [tool.id, tool]));
+  const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
+  let hostIds = [];
+  while (!hostIds.length) {
+    const answer = await runCheckbox({
+      message: "选择插件宿主:",
+      choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+      loop: false,
+      theme,
+    });
+    const result = parseCheckboxResult(answer);
+    if (result === "back") return "back";
+    if (result === "exit") return "exit";
+    if (!result.length) {
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件宿主"));
+      await new Promise(r => setTimeout(r, 1200));
+      continue;
     }
+    hostIds = result;
+  }
+  try {
+    const sourceDir = (await input({ message: "本地插件目录（留空使用 Helper 受管插件）:" }, inquirerContext)).trim();
+    const local = sourceDir || null;
+    const pluginsByHost = new Map();
+    for (const hostId of hostIds) {
+      const label = toolById.get(hostId).name;
+      try {
+        const plugins = local ? readLocalPluginSource(local, hostId).plugins : listManagedPlugins(hostId);
+        pluginsByHost.set(hostId, plugins);
+      } catch (error) {
+        console.log(chalk.yellow(TERM_GUTTER + `- ${label} 不可用：${error.message}`));
+      }
+    }
+    if (!pluginsByHost.size) throw new Error("所选宿主都没有可安装的插件。");
+    const available = new Map();
+    for (const plugins of pluginsByHost.values()) {
+      for (const plugin of plugins) if (!available.has(plugin.name)) available.set(plugin.name, plugin.version);
+    }
+    const hostNames = [...pluginsByHost.keys()].map(id => toolById.get(id).name).join("、");
+    let selected = [];
+    while (!selected.length) {
+      const answer = await runCheckbox({
+        message: `选择 ${hostNames} 插件:`,
+        choices: withNavChoices([...available].map(([name, version]) => ({
+          name: `${name}${version ? ` · ${version}` : ""}`,
+          value: name,
+        })), "↩ 返回主菜单"),
+        loop: false,
+        theme,
+      });
+      const result = parseCheckboxResult(answer);
+      if (result === "back") return "back";
+      if (result === "exit") return "exit";
+      if (!result.length) {
+        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+        await new Promise(r => setTimeout(r, 1200));
+        continue;
+      }
+      selected = result;
+    }
+    const confirmation = await pick({
+      message: `安装 ${selected.length} 个插件到 ${hostNames}${local ? `（本地 ${local}）` : "（Helper 受管）"}？`,
+      choices: [
+        { name: "返回上一步", value: "back" },
+        { name: "确认安装", value: "confirm" },
+        { name: "退出", value: "exit" },
+      ],
+    });
+    if (confirmation === "back") return "back";
+    if (confirmation !== "confirm") return "exit";
+
+    const combos = [];
+    for (const [hostId, plugins] of pluginsByHost) {
+      const names = new Set(plugins.map(plugin => plugin.name));
+      for (const name of selected) {
+        if (names.has(name)) combos.push({ hostId, name });
+        else console.log(chalk.gray(TERM_GUTTER + `- ${name} 不在 ${toolById.get(hostId).name} 的清单，跳过`));
+      }
+    }
+
+    printSectionTitle("━━━ 执行中 ━━━");
+    const rows = [];
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < combos.length; i += 1) {
+      const { hostId, name } = combos[i];
+      const toolName = toolById.get(hostId).name;
+      console.log(chalk.gray(TERM_GUTTER + `正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`));
+      try {
+        const { version } = await installPlugin(name, local ?? undefined, hostId);
+        ok += 1;
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: local ? "本地插件" : "插件", ok: true, hostId });
+      } catch (error) {
+        failed += 1;
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: "失败", mode: local ? "本地插件" : "插件", ok: false, hostId });
+        console.log(chalk.red(TERM_GUTTER + `  ${error.message}`));
+      }
+    }
+    printResultTable("安装结果", rows);
+    for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
+      console.log(pluginHostNote(hostId));
+    }
+    if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
+    else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
   } catch (error) {
     if (error?.name === "ExitPromptError") return "exit";
     console.log(chalk.red(TERM_GUTTER + error.message));

@@ -403,6 +403,10 @@ const hostNotes = {
   pi: "  已登记到 Pi，新会话加载扩展和技能。",
 };
 
+export function pluginHostNote(host) {
+  return hostNotes[host] ?? "";
+}
+
 export function printPluginResult({ pluginId, version }, host) {
   const { label } = hostConfig(host);
   console.log(`  已安装 ${label} 插件 ${pluginId}${version ? ` · ${version}` : ""}`);

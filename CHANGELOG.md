@@ -8,7 +8,8 @@
 
 ### Added
 
-- 插件安装新增 Cursor、Hermes Agent、Pi 三个宿主；卸载入口按「技能 / 插件」区分，五个插件宿主都支持卸载 Helper 管理的插件。：复制到各宿主的插件目录，Cursor 依赖 Reload Window，Hermes Agent 自动 `plugins enable`，Pi 自动 `pi install` 登记。
+- 插件安装新增 Cursor、Hermes Agent、Pi 三个宿主；卸载入口按「技能 / 插件」区分，五个插件宿主都支持卸载 Helper 管理的插件。
+- 插件安装支持同时选择多个宿主和多个插件，逐项安装并汇总结果（命令行仍为单宿主单插件）。：复制到各宿主的插件目录，Cursor 依赖 Reload Window，Hermes Agent 自动 `plugins enable`，Pi 自动 `pi install` 登记。
 
 ### Breaking Changes
 
