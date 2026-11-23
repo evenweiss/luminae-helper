@@ -10,9 +10,7 @@ export const TERM_GUTTER = "  ";
  * package.json 在 <package>/，需要上跳两级
  */
 function readPackageJson() {
-  const packageRoot = globalThis.__LUMINAE_PACKAGE_ROOT__ || join(import.meta.dirname, "..", "..");
-  const pkgPath = join(packageRoot, "package.json");
-  return JSON.parse(readFileSync(pkgPath, "utf-8"));
+  return JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "package.json"), "utf-8"));
 }
 
 /**

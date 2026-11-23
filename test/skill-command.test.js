@@ -18,7 +18,7 @@ function put(path, text) {
   writeFileSync(path, text);
 }
 function install(skillId = "git-push", tool = "claude-code") {
-  return runCli({ argv: ["skill", "install", skillId, "--tool", tool] });
+  return runCli(["skill", "install", skillId, "--tool", tool]);
 }
 
 beforeEach(() => {

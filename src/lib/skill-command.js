@@ -28,11 +28,11 @@ export async function runSkillCommand(args) {
     const skill = catalog.find(skill => skill.id === skillId);
     if (!skill) {
       const ids = catalog.map(skill => skill.id).sort().join("、");
-      throw new Error(`公共技能 ${source.tag} 中没有 ${skillId}。可安装：${ids}`);
+      throw new Error(`技能 ${source.tag} 中没有 ${skillId}。可安装：${ids}`);
     }
     const result = installSkillToTool(skill, tool);
     if (!result.success) throw new Error(result.message);
-    console.log(`  已安装 ${skill.id} 到 ${tool.name}（公共技能 ${source.tag} · ${source.commit}）`);
+    console.log(`  已安装 ${skill.id} 到 ${tool.name}（技能 ${source.tag} · ${source.commit}）`);
     console.log(`  ${result.message}`);
   } finally {
     await source.release?.();

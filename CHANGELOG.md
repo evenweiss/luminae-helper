@@ -1,5 +1,20 @@
 # Changelog
 
+## 未发布
+
+### Changed
+
+- 界面与文档统一用「技能 / 插件」，技能相关的菜单、提示和 README 不再混用英文 Skill。
+
+### Added
+
+- 插件安装新增 Cursor、Hermes Agent、Pi 三个宿主；卸载入口按「技能 / 插件」区分，五个插件宿主都支持卸载 Helper 管理的插件。：复制到各宿主的插件目录，Cursor 依赖 Reload Window，Hermes Agent 自动 `plugins enable`，Pi 自动 `pi install` 登记。
+
+### Breaking Changes
+
+- 移除包装器接入：删除 `runSkillOperation`、`packageRoot` 选项和引擎再导出，包内不再提供 Library API。kfz-skills-helper 0.0.37 起已独立，无调用方。
+- 界面与文档不再使用「公共技能」：与 kfz 拆分后本工具只处理一套技能来源，「公共」已无区分意义。
+
 ## 2.0.0
 
 ### Changed

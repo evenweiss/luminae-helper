@@ -94,12 +94,12 @@ async function refreshUnlocked(options) {
       publishDirectory(temp, mirror);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   } else {
-    if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("公共技能缓存来源不匹配");
+    if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
     await fetchTags(mirror);
   }
-  if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("公共技能缓存来源不匹配");
+  if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
   const tag = stableTags(await git(["tag", "--list"], mirror))[0];
-  if (!tag) throw new Error("公共技能仓库没有正式版本 Tag");
+  if (!tag) throw new Error("技能仓库没有正式版本 Tag");
   const commit = await git(["rev-parse", `refs/tags/${tag}^{commit}`], mirror);
   const snapshots = join(resolve(cacheDir), "snapshots");
   mkdirSync(snapshots, { recursive: true });
@@ -109,14 +109,14 @@ async function refreshUnlocked(options) {
     try {
       await git(["clone", "--no-checkout", "--no-hardlinks", "--", resolve(mirror), temp]);
       await git(["checkout", "--detach", commit], temp);
-      if (discoverSkills(temp).length === 0) throw new Error("正式版本没有可安装的公共技能");
+      if (discoverSkills(temp).length === 0) throw new Error("正式版本没有可安装的技能");
       publishDirectory(temp, root);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   }
   if (await git(["rev-parse", "HEAD"], root) !== commit || await git(["status", "--porcelain", "--untracked-files=all", "--ignored"], root)) {
-    throw new Error("公共技能快照已被修改，请保留本地改动并移走该快照后重试");
+    throw new Error("技能快照已被修改，请保留本地改动并移走该快照后重试");
   }
-  if (discoverSkills(root).length === 0) throw new Error("正式版本没有可安装的公共技能");
+  if (discoverSkills(root).length === 0) throw new Error("正式版本没有可安装的技能");
   const pointer = join(cacheDir, `current-${randomUUID()}.json`);
   try {
     writeFileSync(pointer, JSON.stringify({ repo, tag, commit }) + "\n");

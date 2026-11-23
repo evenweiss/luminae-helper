@@ -5,12 +5,8 @@ import { join } from "node:path";
 
 const root = mkdtempSync(join(tmpdir(), "source-integration-"));
 process.env.HOME = join(root, "home");
-globalThis.__LUMINAE_PACKAGE_ROOT__ = join(root, "wrapper");
-mkdirSync(globalThis.__LUMINAE_PACKAGE_ROOT__);
-writeFileSync(join(globalThis.__LUMINAE_PACKAGE_ROOT__, "package.json"), '{"name":"wrapper","version":"9.8.7"}');
 const { SKILLS, TOOLS, setSkillsSource, discoverInstalledSkills } = await import("../src/lib/constants.js");
 const { installSkillToTool, uninstallSkillFromTool } = await import("../src/lib/installer.js");
-const { getVersion, getPackageName } = await import("../src/utils/version.js");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 function source(name, text) {
   const dir = join(root, name);
@@ -19,7 +15,7 @@ function source(name, text) {
   return dir;
 }
 describe("runtime source integration", () => {
-  it("refreshes discovery and copy source together without changing wrapper identity", () => {
+  it("refreshes discovery and copy source together", () => {
     const first = source("first", "old");
     const second = source("second", "new");
     const tool = TOOLS.find(t => t.id === "codex");
@@ -28,7 +24,6 @@ describe("runtime source integration", () => {
     setSkillsSource(second);
     expect(installSkillToTool(SKILLS[0], tool).success).toBe(true);
     expect(readFileSync(join(tool.skillDir(), "demo/SKILL.md"), "utf8")).toContain("new");
-    expect(getVersion()).toBe("9.8.7"); expect(getPackageName()).toBe("wrapper");
   });
   it("discovers and uninstalls managed content offline after all sources disappear, preserving user files and links", () => {
     const tool = TOOLS.find(t => t.id === "codex");

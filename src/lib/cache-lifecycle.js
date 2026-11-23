@@ -42,7 +42,7 @@ export async function withCacheLock(cacheDir, action) {
       catch (error) {
         if (!["EEXIST", "ENOTEMPTY"].includes(error.code)) throw error;
         reapDeadLock(lock);
-        if (Date.now() >= deadline) throw new Error("公共技能缓存正在更新，请稍后重试");
+        if (Date.now() >= deadline) throw new Error("技能缓存正在更新，请稍后重试");
         await delay(50);
       }
     }
@@ -85,10 +85,10 @@ export function cleanupCache(cacheDir) {
     try {
       const run = args => execFileSync("git", args, { cwd: path, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim();
       if (run(["rev-parse", "HEAD"]) !== name || run(["status", "--porcelain", "--untracked-files=all", "--ignored"])) {
-        console.warn(`公共技能旧快照包含本地修改，已保留：${path}`);
+        console.warn(`技能旧快照包含本地修改，已保留：${path}`);
         continue;
       }
-    } catch { console.warn(`公共技能旧快照无法验证，已保留：${path}`); continue; }
+    } catch { console.warn(`技能旧快照无法验证，已保留：${path}`); continue; }
     rmSync(path, { recursive: true, force: true });
   }
 }

@@ -1,9 +1,8 @@
 {
   "name": "luminae-helper",
   "version": "2.0.0",
-  "description": "Install public AI agent skills to coding tools",
+  "description": "Install AI agent skills to coding tools",
   "type": "module",
-  "main": "src/index.js",
   "bin": {
     "luminae-helper": "src/cli.js"
   },
@@ -53,8 +52,5 @@
   },
   "devDependencies": {
     "vitest": "^4.1.6"
-  },
-  "exports": {
-    ".": "./src/index.js"
   }
 }

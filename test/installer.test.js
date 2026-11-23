@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// 必须在 import 之前重定向 HOME 与 package root：
+// 必须在 import 之前重定向 HOME，导入后把技能源指向临时包目录：
 // constants.js 在模块加载时发现技能，tool 目标路径用 homedir() 现算。
 const root = mkdtempSync(join(tmpdir(), "luminae-installer-"));
 const home = join(root, "home");
@@ -15,10 +15,10 @@ writeFileSync(join(root, "outside.txt"), "SECRET-OUTSIDE\n");
 symlinkSync(join(root, "outside.txt"), join(pkg, "skills", "demo-skill", "leak.md"));
 
 process.env.HOME = home;
-globalThis.__LUMINAE_PACKAGE_ROOT__ = pkg;
 
 const { installSkillToTool, uninstallSkillFromTool } = await import("../src/lib/installer.js");
-const { SKILLS, TOOLS } = await import("../src/lib/constants.js");
+const { SKILLS, TOOLS, setSkillsSource } = await import("../src/lib/constants.js");
+setSkillsSource(pkg);
 
 const skill = SKILLS.find(s => s.id === "demo-skill");
 const tool = TOOLS.find(t => t.id === "claude-code");

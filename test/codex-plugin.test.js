@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -8,7 +8,7 @@ vi.mock("node:os", async original => ({ ...await original(), homedir: () => nati
 vi.mock("node:child_process", () => ({
   execFile: Object.assign(() => {}, { [Symbol.for("nodejs.util.promisify.custom")]: native.run }),
 }));
-const { installPlugin, listManagedPlugins, readLocalPluginSource, runPluginCommand }
+const { installPlugin, listInstalledPlugins, listManagedPlugins, readLocalPluginSource, runPluginCommand, uninstallPlugin }
   = await import("../src/lib/codex-plugin.js");
 
 let root, sourceDir;
@@ -145,5 +145,151 @@ it("does not repoint an existing Claude Code marketplace", async () => {
 it("rejects duplicate or unsupported tool options before invoking any host", async () => {
   await expect(runPluginCommand(["install", "workflow", "--tool", "codex", "--tool", "claude-code"])).rejects.toThrow("用法");
   await expect(runPluginCommand(["install", "workflow", "--tool", "unknown"])).rejects.toThrow("不支持插件宿主");
+  expect(native.run).not.toHaveBeenCalled();
+});
+
+// ── 目录宿主：Cursor / Hermes Agent / Pi ──
+
+it("lists the managed plugin for every plugin host", () => {
+  for (const host of ["cursor", "hermes-agent", "pi"]) {
+    expect(listManagedPlugins(host).map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
+  }
+});
+
+it("reads a standalone Cursor plugin directory", () => {
+  const dir = join(root, "cursor-plugin");
+  put(join(dir, ".cursor-plugin/plugin.json"), { name: "workflow", version: "1.2.3" });
+  expect(readLocalPluginSource(dir, "cursor").plugins).toEqual([
+    { name: "workflow", version: "1.2.3", dir: realpathSync(dir) },
+  ]);
+});
+
+it("installs a managed plugin for Cursor into its local plugin directory", async () => {
+  await expect(installPlugin("ai-development-workflow", undefined, "cursor"))
+    .resolves.toMatchObject({ pluginId: "ai-development-workflow", version: "0.10.2" });
+  const dest = join(native.home, ".cursor/plugins/local/ai-development-workflow");
+  expect(existsSync(join(dest, ".cursor-plugin/plugin.json"))).toBe(true);
+  expect(existsSync(join(dest, "skills/ai-development-workflow/SKILL.md"))).toBe(true);
+  expect(existsSync(join(dest, "hooks/cursor.json"))).toBe(true);
+  expect(native.run).not.toHaveBeenCalled();
+});
+
+it("refuses to overwrite a Cursor plugin it does not manage", async () => {
+  mkdirSync(join(native.home, ".cursor/plugins/local/ai-development-workflow"), { recursive: true });
+  await expect(installPlugin("ai-development-workflow", undefined, "cursor")).rejects.toThrow("不属于 Luminae Helper");
+});
+
+it("installs and enables a managed plugin for Hermes Agent", async () => {
+  native.run.mockImplementation(async (_, args) => {
+    if (args[1] === "enable") return { stdout: "" };
+    if (args[1] === "show") return { stdout: "ai-development-workflow v0.10.2\nStatus: enabled\n" };
+    throw new Error(`unexpected ${args.join(" ")}`);
+  });
+  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent"))
+    .resolves.toMatchObject({ pluginId: "ai-development-workflow" });
+  expect(existsSync(join(native.home, ".hermes/plugins/ai-development-workflow/plugin.yaml"))).toBe(true);
+  expect(native.run.mock.calls.map(([, args]) => args)).toEqual([
+    ["plugins", "enable", "ai-development-workflow"],
+    ["plugins", "show", "ai-development-workflow"],
+  ]);
+});
+
+it("reports a Hermes plugin that did not enable", async () => {
+  native.run.mockImplementation(async (_, args) => ({ stdout: args[1] === "show" ? "Status: disabled" : "" }));
+  await expect(installPlugin("ai-development-workflow", undefined, "hermes-agent")).rejects.toThrow("未确认启用");
+});
+
+it("installs a managed package for Pi and verifies the settings entry", async () => {
+  const agentDir = join(native.home, ".pi/agent");
+  const dest = join(native.home, ".local/share/luminae-helper/pi-packages/ai-development-workflow");
+  native.run.mockImplementation(async (_, args) => {
+    expect(args).toEqual(["install", dest]);
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+      packages: ["../../.local/share/luminae-helper/pi-packages/ai-development-workflow"],
+    }));
+    return { stdout: "" };
+  });
+  await expect(installPlugin("ai-development-workflow", undefined, "pi"))
+    .resolves.toMatchObject({ pluginId: "ai-development-workflow", version: "0.10.2" });
+  expect(existsSync(join(dest, "package.json"))).toBe(true);
+});
+
+it("reports a Pi package missing from Pi settings", async () => {
+  mkdirSync(join(native.home, ".pi/agent"), { recursive: true });
+  writeFileSync(join(native.home, ".pi/agent/settings.json"), JSON.stringify({ packages: [] }));
+  native.run.mockResolvedValueOnce({ stdout: "" });
+  await expect(installPlugin("ai-development-workflow", undefined, "pi")).rejects.toThrow("未登记");
+});
+
+// ── 插件卸载 ──
+
+it("lists and removes a Codex plugin from the helper marketplace", async () => {
+  const config = join(native.home, ".codex", "config.toml");
+  put(join(native.home, ".codex/config.toml"), {});
+  writeFileSync(config, '[plugins."workflow@luminae-helper"]\nenabled = true\n\n[plugins."other@official"]\nenabled = true\n');
+  expect(listInstalledPlugins("codex")).toEqual([{ name: "workflow" }]);
+  native.run.mockImplementation(async (_, args) => {
+    expect(args).toEqual(["plugin", "remove", "workflow@luminae-helper", "--json"]);
+    writeFileSync(config, '[plugins."other@official"]\nenabled = true\n');
+    return { stdout: "{}" };
+  });
+  await expect(uninstallPlugin("workflow", "codex")).resolves.toMatchObject({ pluginId: "workflow" });
+  expect(listInstalledPlugins("codex")).toEqual([]);
+});
+
+it("lists and removes a Claude Code plugin from the helper marketplace", async () => {
+  const file = join(native.home, ".claude/plugins/installed_plugins.json");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ plugins: { "workflow@luminae-helper": [{}], "other@official": [{}] } }));
+  expect(listInstalledPlugins("claude-code")).toEqual([{ name: "workflow" }]);
+  native.run.mockImplementation(async (_, args) => {
+    expect(args).toEqual(["plugin", "uninstall", "workflow@luminae-helper", "--scope", "user", "--json"]);
+    writeFileSync(file, JSON.stringify({ plugins: { "other@official": [{}] } }));
+    return { stdout: "{}" };
+  });
+  await expect(uninstallPlugin("workflow", "claude-code")).resolves.toMatchObject({ pluginId: "workflow" });
+});
+
+it("removes a Cursor plugin only when the Helper marker is present", async () => {
+  const foreign = join(native.home, ".cursor/plugins/local/foreign");
+  mkdirSync(foreign, { recursive: true });
+  const owned = join(native.home, ".cursor/plugins/local/workflow");
+  mkdirSync(owned, { recursive: true });
+  writeFileSync(join(owned, ".luminae-helper-plugin"), "luminae-helper");
+  expect(listInstalledPlugins("cursor")).toEqual([{ name: "workflow" }]);
+  await uninstallPlugin("workflow", "cursor");
+  expect(existsSync(owned)).toBe(false);
+  expect(existsSync(foreign)).toBe(true);
+  await expect(uninstallPlugin("foreign", "cursor")).rejects.toThrow("没有 Helper 管理的插件");
+});
+
+it("removes a Hermes Agent plugin through its CLI", async () => {
+  const dir = join(native.home, ".hermes/plugins/workflow");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".luminae-helper-plugin"), "luminae-helper");
+  native.run.mockImplementation(async (_, args) => {
+    expect(args).toEqual(["plugins", "remove", "workflow"]);
+    rmSync(dir, { recursive: true, force: true });
+    return { stdout: "" };
+  });
+  await expect(uninstallPlugin("workflow", "hermes-agent")).resolves.toMatchObject({ pluginId: "workflow" });
+  expect(existsSync(dir)).toBe(false);
+});
+
+it("unregisters and deletes a Pi plugin package", async () => {
+  const dir = join(native.home, ".local/share/luminae-helper/pi-packages/workflow");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".luminae-helper-plugin"), "luminae-helper");
+  native.run.mockImplementation(async (_, args) => {
+    expect(args).toEqual(["remove", dir]);
+    return { stdout: "" };
+  });
+  await expect(uninstallPlugin("workflow", "pi")).resolves.toMatchObject({ pluginId: "workflow" });
+  expect(existsSync(dir)).toBe(false);
+});
+
+it("rejects an unsupported uninstall host before touching files", async () => {
+  await expect(uninstallPlugin("workflow", "opencode")).rejects.toThrow("不支持插件宿主");
   expect(native.run).not.toHaveBeenCalled();
 });

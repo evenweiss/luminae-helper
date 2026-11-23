@@ -6,7 +6,7 @@ import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
-import { PLUGIN_HOSTS, listManagedPlugins, readLocalPluginSource, installPlugin, printPluginResult } from "./codex-plugin.js";
+import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, readLocalPluginSource, installPlugin, uninstallPlugin, printPluginResult } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
@@ -36,7 +36,7 @@ function afterPromptFlush() {
 
 /**
  * 打印步骤区块标题（青粗体 + 统一左侧 gutter + 段后空行）。
- * @param {string} title 标题全文，例如「━━━ 选择 Skill ━━━」
+ * @param {string} title 标题全文，例如「━━━ 选择技能 ━━━」
  */
 function printSectionTitle(title) {
   console.log(chalk.cyan.bold(TERM_GUTTER + title + "\n"));
@@ -82,7 +82,7 @@ export function parseCheckboxResult(ans) {
 }
 
 function installModeDescription(target) {
-  return target.installMode === "file" ? "旧命令文件" : "Skill 目录";
+  return target.installMode === "file" ? "旧命令文件" : "技能目录";
 }
 
 function stripAnsi(text) {
@@ -141,6 +141,11 @@ function withNavChoices(items, backLabel, exitLabel = "✕ 退出") {
   ];
 }
 
+/** 单选菜单统一关闭循环：到最后一项再按↓不再跳回第一项。 */
+function pick(config) {
+  return Select({ loop: false, ...config }, inquirerContext);
+}
+
 /**
  * 运行带功能行的多选 Checkbox（见 `checkbox-with-action-rows.js`）。
  * Ctrl+C 时按项目惯例视为退出整段交互。
@@ -160,7 +165,7 @@ async function stepSelectSkills() {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择 Skill ━━━");
+    printSectionTitle("━━━ 选择技能 ━━━");
 
     const skillChoices = SKILLS.map(s => ({
       name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
@@ -174,7 +179,7 @@ async function stepSelectSkills() {
     };
 
     const ans = await runCheckbox({
-      message: "选择 Skill:",
+      message: "选择技能:",
       choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出"),
       loop: false,
       theme,
@@ -186,7 +191,7 @@ async function stepSelectSkills() {
     if (result === "exit") return "abort";
 
     if (result.length === 0) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个 Skill"));
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个技能"));
       await new Promise(r => setTimeout(r, 1200));
       continue;
     }
@@ -246,28 +251,25 @@ function asIdArray(v) {
 }
 
 // ── Step 3: Preview + Confirm（仅标题 + 确认菜单；不再展示 Skill/工具明细）──
-async function stepPreviewConfirm(isUninstall, embedded = false) {
+async function stepPreviewConfirm(isUninstall) {
   await afterPromptFlush();
   printBanner();
   const actionLabel = isUninstall ? "卸载" : "安装";
   printSectionTitle("━━━ " + actionLabel + "预览 ━━━");
   // 第三步：标题下方不再打印 Skill/工具明细列表，由确认菜单直接操作
 
-  const ans = await Select(
+  const ans = await pick(
     {
       message: "确认" + actionLabel + "？",
       choices: [
         { name: "✓ 确认" + actionLabel, value: "confirm" },
         { name: "↩ 返回上一步", value: "back" },
-        ...(embedded ? [{ name: "↩ 返回主菜单", value: "menu" }] : []),
         { name: "✕ 退出", value: "exit" },
       ],
       theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
-    },
-    inquirerContext
+    }
   ).catch(() => "back");
 
-  if (ans === "menu") return "exit"; // 结束本次操作，回包装器主菜单
   if (ans === "exit") return "abort"; // 退出整个工具
   return ans;
 }
@@ -310,7 +312,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
       current += 1;
       const skill = SKILLS.find(s => s.id === skillId);
       if (!skill) {
-        console.log(chalk.gray(TERM_GUTTER + "- Skill " + skillId + " 未识别，跳过"));
+        console.log(chalk.gray(TERM_GUTTER + "- 技能 " + skillId + " 未识别，跳过"));
         continue;
       }
 
@@ -407,13 +409,13 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
 }
 
 // ── Unified flow (install / uninstall) ──
-async function runFlow(isUninstall, embedded = false) {
+async function runFlow(isUninstall) {
   let heldSource;
-  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }, embedded); }
+  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }); }
   finally { await heldSource?.release?.(); }
 }
 
-async function runFlowWithSource(isUninstall, holdSource, embedded) {
+async function runFlowWithSource(isUninstall, holdSource) {
   const installedTools = detectInstalledTools().filter(t => t.installed);
   if (installedTools.length === 0) {
     await afterPromptFlush();
@@ -440,13 +442,13 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
     publicSourceLabel = "已安装的受管内容（离线卸载）";
   } else {
     let source;
-    console.log(TERM_GUTTER + "正在检查公共技能正式版本…");
+    console.log(TERM_GUTTER + "正在检查技能正式版本…");
     try {
       source = await refreshPublicSource();
       holdSource(source);
-      publicSourceLabel = `公共技能 ${source.tag} · ${source.commit}`;
+      publicSourceLabel = `技能 ${source.tag} · ${source.commit}`;
     } catch (error) {
-      console.log(chalk.yellow(TERM_GUTTER + `公共技能更新失败：${error.message}`));
+      console.log(chalk.yellow(TERM_GUTTER + `技能更新失败：${error.message}`));
       const cached = await acquireCachedSource();
       if (cached) holdSource(cached);
       if (!cached) {
@@ -454,21 +456,21 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
         await input({ message: "按回车返回主菜单…" }, inquirerContext);
         return "back";
       }
-      const choice = await Select({
+      const choice = await pick({
         message: `是否使用旧缓存 ${cached.tag} · ${cached.commit}？`,
         choices: [
           { name: "返回，不安装", value: "back" },
           { name: "使用此缓存安装（未确认是最新版本）", value: "cache" },
         ],
-      }, inquirerContext);
+      });
       if (choice !== "cache") return "back";
       source = cached;
-      publicSourceLabel = `公共技能旧缓存 ${source.tag} · ${source.commit}（未确认最新）`;
+      publicSourceLabel = `技能旧缓存 ${source.tag} · ${source.commit}（未确认最新）`;
     }
     setSkillsSource(source.root);
   }
   if (SKILLS.length === 0) {
-    console.log(TERM_GUTTER + "没有可操作的 Skill。");
+    console.log(TERM_GUTTER + "没有可操作的技能。");
     await input({ message: "按回车返回主菜单…" }, inquirerContext);
     return "back";
   }
@@ -491,7 +493,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
       selectedToolIds = result;
       step = 3;
     } else if (step === 3) {
-      const result = await stepPreviewConfirm(isUninstall, embedded);
+      const result = await stepPreviewConfirm(isUninstall);
       if (result === "back") { step = 2; continue; }
       if (result === "abort") return "abort";
       if (result === "exit") return "exit";
@@ -502,7 +504,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
         printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
         await input(
           {
-            message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
+            message: "按任意键退出...",
             theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
@@ -530,7 +532,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
             printResultTable("安装结果", accumulatedResultRows);
             await input(
               {
-                message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
+                message: "按任意键退出...",
                 theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
@@ -577,26 +579,28 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
   }
 }
 
-export async function runOperation(action) {
-  if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
-  await afterPromptFlush();
-  const result = await runFlow(action === "uninstall", true);
-  await afterPromptFlush();
-  return result;
+async function selectKind(message) {
+  return pick({
+    message,
+    choices: withNavChoices([
+      { name: "技能", value: "skill" },
+      { name: "插件", value: "plugin" },
+    ], "↩ 返回主菜单"),
+  });
 }
 
 async function runInteractivePluginInstall() {
   printSectionTitle("━━━ 选择插件宿主 ━━━");
   const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
   if (!tools.length) {
-    console.log(chalk.yellow(TERM_GUTTER + "请先安装 Codex 或 Claude Code CLI。"));
+    console.log(chalk.yellow(TERM_GUTTER + "没有已安装的插件宿主，请先安装 Cursor、Codex、Claude Code、Hermes Agent 或 Pi。"));
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
-  const host = await Select({
+  const host = await pick({
     message: "选择插件宿主:",
     choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
-  }, inquirerContext);
+  });
   if (host === "__back__") return "back";
   if (host === "__exit__") return "exit";
   const { name: hostName } = tools.find(tool => tool.id === host);
@@ -606,23 +610,23 @@ async function runInteractivePluginInstall() {
     const plugins = local ? local.plugins : listManagedPlugins(host);
     if (!plugins.length) throw new Error("当前来源没有可安装的插件。");
     while (true) {
-      const selected = await Select({
+      const selected = await pick({
         message: `选择 ${hostName} 插件:`,
         choices: withNavChoices(plugins.map(plugin => ({
           name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
           value: plugin.name,
         })), "↩ 返回主菜单"),
-      }, inquirerContext);
+      });
       if (selected === "__back__") return "back";
       if (selected === "__exit__") return "exit";
-      const confirmation = await Select({
+      const confirmation = await pick({
         message: `安装 ${selected} 到 ${hostName}${local ? `（本地 ${local.directory}）` : "（Helper 受管）"}？`,
         choices: [
           { name: "返回上一步", value: "back" },
           { name: "确认安装", value: "confirm" },
           { name: "退出", value: "exit" },
         ],
-      }, inquirerContext);
+      });
       if (confirmation === "back") continue;
       if (confirmation !== "confirm") return "exit";
       printPluginResult(await installPlugin(selected, local?.directory, host), host);
@@ -636,6 +640,54 @@ async function runInteractivePluginInstall() {
   return "back";
 }
 
+async function runInteractivePluginUninstall() {
+  printSectionTitle("━━━ 卸载插件 ━━━");
+  const hosts = detectInstalledTools()
+    .filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id))
+    .map(tool => ({ ...tool, plugins: listInstalledPlugins(tool.id) }))
+    .filter(tool => tool.plugins.length > 0);
+  if (!hosts.length) {
+    console.log(chalk.yellow(TERM_GUTTER + "没有可卸载的插件。"));
+    await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+    return "back";
+  }
+  const hostId = await pick({
+    message: "选择插件宿主:",
+    choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+  });
+  if (hostId === "__back__") return "back";
+  if (hostId === "__exit__") return "exit";
+  const host = hosts.find(tool => tool.id === hostId);
+  const name = await pick({
+    message: `选择 ${host.name} 插件:`,
+    choices: withNavChoices(host.plugins.map(plugin => ({ name: plugin.name, value: plugin.name })), "↩ 返回主菜单"),
+  });
+  if (name === "__back__") return "back";
+  if (name === "__exit__") return "exit";
+  const confirmation = await pick({
+    message: `卸载 ${name}（${host.name}）？`,
+    choices: [
+      { name: "返回", value: "back" },
+      { name: "确认卸载", value: "confirm" },
+      { name: "退出", value: "exit" },
+    ],
+  });
+  if (confirmation === "back") return "back";
+  if (confirmation !== "confirm") return "exit";
+  await afterPromptFlush();
+  printBanner();
+  printSectionTitle("━━━ 卸载结果 ━━━");
+  try {
+    await uninstallPlugin(name, hostId);
+    printResultTable("卸载结果", [{ toolName: host.name, skillName: name, status: chalk.green("已卸载"), mode: "插件" }]);
+  } catch (error) {
+    printResultTable("卸载结果", [{ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件" }]);
+    console.log(chalk.red(TERM_GUTTER + error.message));
+  }
+  await input({ message: "按任意键退出..." }, inquirerContext).catch(() => {});
+  return "exit";
+}
+
 // ── Main ──
 export async function runInteractive() {
   let exit = false;
@@ -643,17 +695,16 @@ export async function runInteractive() {
   while (!exit) {
     printBanner();
 
-    const action = await Select(
+    const action = await pick(
       {
         message: "选择操作:",
         choices: [
           { name: padChoice(" 安装 / 更新", 20), value: "install" },
-          { name: padChoice(" 卸载 Skill", 20), value: "uninstall" },
+          { name: padChoice(" 卸载", 20), value: "uninstall" },
           { name: padChoice(" 退出", 20), value: "exit" },
         ],
         theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
-      },
-      inquirerContext
+      }
     ).catch(() => "exit");
 
     if (action === "exit") {
@@ -662,20 +713,14 @@ export async function runInteractive() {
 
     await afterPromptFlush();
     let result;
+    const kind = await selectKind(action === "install" ? "选择要安装的内容类型:" : "选择要卸载的内容类型:");
+    if (kind === "__back__") continue;
+    if (kind === "__exit__") break;
+    await afterPromptFlush();
     if (action === "install") {
-      const kind = await Select({
-        message: "选择要安装的内容类型:",
-        choices: withNavChoices([
-          { name: "Skill", value: "skill" },
-          { name: "插件", value: "plugin" },
-        ], "↩ 返回主菜单"),
-      }, inquirerContext);
-      if (kind === "__back__") continue;
-      if (kind === "__exit__") break;
-      await afterPromptFlush();
       result = kind === "plugin" ? await runInteractivePluginInstall() : await runFlow(false);
     } else {
-      result = await runFlow(true);
+      result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true);
     }
 
     if (result === "exit" || result === "abort") {
