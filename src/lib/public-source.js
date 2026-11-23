@@ -32,7 +32,7 @@ async function git(args, cwd) {
 // 把 git 的网络类失败归并成一句可操作提示，其余错误原样抛出。
 function sourceError(error) {
   if (error?.message?.startsWith("找不到 Git")) return error;
-  const text = String(error?.stderr || error?.message || "");
+  const text = String(error?.stderr || error?.stdout || error?.message || "");
   if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
   const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
   return new Error(`无法获取技能仓库：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
@@ -84,6 +84,28 @@ export async function acquireCachedSource(options = {}) {
     cleanupCache(resolved.cacheDir);
     return held;
   });
+}
+
+export async function latestPublicTag(options = {}) {
+  const resolved = optionsWithDefaults(options);
+  const cacheDir = resolve(resolved.cacheDir);
+  const mirror = join(cacheDir, "repository.git");
+  try {
+    await withCacheLock(cacheDir, async () => {
+      if (!existsSync(mirror)) {
+        mkdirSync(cacheDir, { recursive: true });
+        await git(["clone", "--bare", "--", resolved.repo, mirror]);
+      } else {
+        if (await git(["remote", "get-url", "origin"], mirror) !== resolved.repo) throw new Error("技能缓存来源不匹配");
+        await fetchTags(mirror);
+      }
+    });
+    const tag = stableTags(await git(["tag", "--list"], mirror))[0];
+    if (!tag) throw new Error("技能仓库没有正式版本 Tag");
+    return tag;
+  } catch (error) {
+    throw sourceError(error);
+  }
 }
 
 export async function refreshPublicSource(options = {}) {

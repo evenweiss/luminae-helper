@@ -61,6 +61,19 @@ describe("public skill source", () => {
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toContain("first");
     expect(source.readCachedSource(f.options).commit).toBe(second.commit);
   });
+  it("reports the latest tag without creating a snapshot", async () => {
+    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
+    expect(await source.latestPublicTag(f.options)).toBe("0.1.0");
+    f.commit("second"); f.git("tag", "0.2.0");
+    expect(await source.latestPublicTag(f.options)).toBe("0.2.0");
+    expect(existsSync(join(f.options.cacheDir, "current.json"))).toBe(false);
+    expect(existsSync(join(f.options.cacheDir, "snapshots"))).toBe(false);
+  });
+  it("summarizes a network failure when checking the latest tag", async () => {
+    const f = fixture();
+    await expect(source.latestPublicTag({ ...f.options, repo: "http://127.0.0.1:1/ai-skills.git" }))
+      .rejects.toThrow(/网络或代理不可用/);
+  });
   it("reports network failure but retains an explicitly readable validated cache", async () => {
     const f = fixture(); f.commit("cached"); f.git("tag", "0.1.0");
     const first = await source.refreshPublicSource(f.options);

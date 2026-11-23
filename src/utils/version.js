@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
+import { latestPublicTag, readCachedSource } from "../lib/public-source.js";
 
 export const TERM_GUTTER = "  ";
 
@@ -95,13 +96,28 @@ export async function checkOutdated() {
 
   if (!latestVersion) {
     console.log(chalk.yellow(TERM_GUTTER + "⚠ 无法获取最新版本信息，请检查网络连接"));
-    return;
-  }
-
-  if (compareSemver(currentVersion, latestVersion) >= 0) {
+  } else if (compareSemver(currentVersion, latestVersion) >= 0) {
     console.log(chalk.green(TERM_GUTTER + `✓ 已是最新版本 (${currentVersion})`));
   } else {
     console.log(chalk.yellow(TERM_GUTTER + `⚠ 发现新版本: ${latestVersion}（当前: ${currentVersion})`));
     console.log(TERM_GUTTER + `  更新命令: npm install -g ${packageName}`);
+  }
+
+  const cached = readCachedSource();
+  let latestTag;
+  try {
+    latestTag = await latestPublicTag();
+  } catch (error) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 无法检查技能仓库更新：${error.message}`));
+    return;
+  }
+  if (!cached) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 本地没有已验证的技能快照（技能仓库最新 ${latestTag}）`));
+    console.log(TERM_GUTTER + "  安装命令: luminae-helper");
+  } else if (cached.tag === latestTag) {
+    console.log(chalk.green(TERM_GUTTER + `✓ 技能仓库已是最新 (${latestTag} · ${cached.commit.slice(0, 7)})`));
+  } else {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 技能仓库有更新: ${latestTag}（本地 ${cached.tag}）`));
+    console.log(TERM_GUTTER + "  更新命令: luminae-helper");
   }
 }
