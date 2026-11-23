@@ -9,8 +9,8 @@ import * as source from "../src/lib/public-source.js";
 
 const children = [];
 const roots = [];
-async function startChild(code) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["pipe", "pipe", "pipe"] });
+async function startChild(code, env = process.env) {
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["pipe", "pipe", "pipe"], env });
   children.push(child);
   let errors = ""; child.stderr.on("data", chunk => { errors += chunk; });
   const ready = await new Promise((resolve, reject) => {
@@ -175,6 +175,21 @@ describe("public skill source", () => {
     f.commit("second"); f.git("tag", "0.2.0");
     const second = await source.refreshPublicSource(f.options); await first.release(); await second.release();
     expect(existsSync(first.root)).toBe(true);
+  });
+  it("tells the user to install Git when the executable is missing", async () => {
+    const f = fixture();
+    const module = pathToFileURL(join(import.meta.dirname, "../src/lib/public-source.js")).href;
+    const { ready } = await startChild(`
+      import { refreshPublicSource } from ${JSON.stringify(module)};
+      try { await refreshPublicSource(${JSON.stringify(f.options)}); }
+      catch (error) { console.log(JSON.stringify({ message: error.message })); }
+    `, { ...process.env, PATH: "/nonexistent" });
+    expect(ready.message).toContain("找不到 Git");
+  });
+  it("summarizes a network failure as an actionable message", async () => {
+    const f = fixture();
+    await expect(source.refreshPublicSource({ ...f.options, repo: "http://127.0.0.1:1/ai-skills.git" }))
+      .rejects.toThrow(/网络或代理不可用/);
   });
   it("does not accept another remote's cached source", async () => {
     const f = fixture(); f.commit("cached"); f.git("tag", "0.1.0");

@@ -17,11 +17,25 @@ function optionsWithDefaults(options) {
   return { ...publicSourceOptions(), ...options };
 }
 async function git(args, cwd) {
-  const { stdout } = await exec("git", args, {
-    cwd, encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C" },
-  });
-  return stdout.trim();
+  try {
+    const { stdout } = await exec("git", args, {
+      cwd, encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C" },
+    });
+    return stdout.trim();
+  } catch (error) {
+    if (error?.code === "ENOENT") throw new Error("找不到 Git。请先安装 Git（用于拉取技能与插件源码）。");
+    throw error;
+  }
+}
+
+// 把 git 的网络类失败归并成一句可操作提示，其余错误原样抛出。
+function sourceError(error) {
+  if (error?.message?.startsWith("找不到 Git")) return error;
+  const text = String(error?.stderr || error?.message || "");
+  if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
+  const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
+  return new Error(`无法获取技能仓库：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
 }
 function publishDirectory(temp, destination) {
   try { renameSync(temp, destination); }
@@ -79,6 +93,8 @@ export async function refreshPublicSource(options = {}) {
     try {
       const source = await refreshUnlocked(resolved);
       return leaseSource(resolved.cacheDir, source);
+    } catch (error) {
+      throw sourceError(error);
     } finally { cleanupCache(resolved.cacheDir); }
   });
 }

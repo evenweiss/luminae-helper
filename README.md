@@ -2,12 +2,12 @@
 
 AI 编程工具的技能和插件安装 CLI。一键将 AI agent 技能安装到 Claude Code、Cursor、Codex、Hermes Agent、OpenCode 和 Pi。
 
-技能源码从正式 Tag 获取。选择「安装 / 更新 → 技能」时从 `ai-skills` 拉取最新正式 Git Tag，再复制到目标工具。首次需要网络与 Git；卸载和 `--version` 不需要拉取技能。
+技能和插件的源码都从正式 Tag 获取。安装 / 更新时从 `ai-skills` 拉取最新正式 Git Tag，技能复制到目标工具，插件按宿主复制或登记。首次需要网络与 Git；卸载和 `--version` 不需要拉取源码。
 
 ## 前置条件
 
 - Node.js >= 18.0.0
-- Git（技能安装 / 更新需要访问 GitHub）
+- Git（技能和插件的安装 / 更新需要访问 GitHub；缺失时会提示先安装 Git）
 - 至少一个目标 AI 工具已安装
 
 ## 安装
