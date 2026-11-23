@@ -30,6 +30,19 @@ it("loads runtime skills before offering the install list", async () => {
   await runInteractive();
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
 });
+
+it("starts the uninstall skill list with nothing selected", async () => {
+  const directory = join(root, "home/.codex/skills/runtime");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "SKILL.md"), "---\nname: runtime\nmanaged-by: luminae-helper\n---\nbody");
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
+  await runInteractive();
+  const call = prompts.checkbox.mock.calls.find(([config]) => config.message === "选择技能:");
+  expect(call).toBeTruthy();
+  const selectable = call[0].choices.filter(choice => typeof choice.value === "string" && !choice.value.startsWith("__"));
+  expect(selectable.length).toBeGreaterThan(0);
+  expect(selectable.every(choice => choice.checked === false)).toBe(true);
+});
 it.each([false, true])("only loads stale cache after explicit consent=%s", async (consent) => {
   source.refreshPublicSource.mockRejectedValue(new Error("offline"));
   source.acquireCachedSource.mockReturnValue({ root, tag: "0.2.0", commit: "old" });

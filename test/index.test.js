@@ -15,6 +15,18 @@ it("keeps standalone menu and version behavior", async () => {
   expect(version.printVersion).toHaveBeenCalledOnce(); expect(version.checkOutdated).toHaveBeenCalledOnce();
 });
 
+it("prints help and rejects unknown commands without opening the menu", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await api.runCli(["--help"])).toBe(0);
+    expect(log.mock.calls.flat().join("\n")).toContain("用法");
+    expect(await api.runCli(["foo"])).toBe(1);
+    expect(error.mock.calls.flat().join("\n")).toContain("未知命令");
+  } finally { log.mockRestore(); error.mockRestore(); }
+  expect(ui.runInteractive).not.toHaveBeenCalled();
+});
+
 it("installs a plugin from arguments without launching the interactive menu", async () => {
   const args = ["install", "workflow", "--source", "/fixture/local source"];
   expect(await api.runCli(["plugin", ...args])).toBe(0);

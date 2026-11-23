@@ -161,7 +161,7 @@ async function runCheckbox(config) {
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills() {
+async function stepSelectSkills(defaultChecked = true) {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -170,7 +170,7 @@ async function stepSelectSkills() {
     const skillChoices = SKILLS.map(s => ({
       name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
       value: s.id,
-      checked: true,
+      checked: defaultChecked,
     }));
 
     const theme = {
@@ -481,7 +481,7 @@ async function runFlowWithSource(isUninstall, holdSource) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills();
+      const result = await stepSelectSkills(!isUninstall);
       if (result === "back") return "back";
       if (result === "abort") return "abort";
       selectedSkillIds = result;
@@ -621,7 +621,10 @@ async function runInteractivePluginInstall() {
   try {
     const sourceDir = (await input({ message: "本地插件目录（留空使用技能仓库最新版本）:" }, inquirerContext)).trim();
     const local = sourceDir || null;
-    if (!local) snapshot = await refreshPublicSource();
+    if (!local) {
+      console.log(TERM_GUTTER + "正在检查插件正式版本…");
+      snapshot = await refreshPublicSource();
+    }
     const pluginsByHost = new Map();
     for (const hostId of hostIds) {
       const label = toolById.get(hostId).name;
