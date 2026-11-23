@@ -33,6 +33,9 @@ async function git(args, cwd) {
 function sourceError(error) {
   if (error?.message?.startsWith("找不到 Git")) return error;
   const text = String(error?.stderr || error?.stdout || error?.message || "");
+  if (error?.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error?.signal) || /timed out/i.test(text)) {
+    return new Error("无法获取技能仓库：网络或代理不可用（拉取超时）。");
+  }
   if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
   const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
   return new Error(`无法获取技能仓库：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
@@ -48,7 +51,9 @@ async function fetchTags(mirror) {
   for (let attempt = 0; ; attempt++) {
     try { return await git(["fetch", "--prune", "--no-tags", "origin", "refs/tags/*:refs/tags/*"], mirror); }
     catch (error) {
-      if (attempt >= 2 || !/cannot lock ref|Unable to create .*\.lock/.test(error.stderr || "")) throw error;
+      const retryable = /cannot lock ref|Unable to create .*\.lock/.test(error.stderr || "")
+        || error.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error.signal);
+      if (attempt >= 2 || !retryable) throw error;
       await delay(200);
     }
   }

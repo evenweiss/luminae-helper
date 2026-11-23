@@ -37,11 +37,16 @@ luminae-helper
 
 ```bash
 luminae-helper skill install git-flow --tool codex
-luminae-helper skill install git-push --tool claude-code
+luminae-helper skill install git-flow git-push --tool claude-code
+luminae-helper skill install --all --tool codex
+luminae-helper skill uninstall git-flow --tool codex
+luminae-helper skill uninstall --all --tool codex
 luminae-helper skill --help
 ```
 
-`skill install` 根据最新正式 Tag 校验技能 ID，只安装到 `--tool` 指定的已安装宿主。技能 ID 不存在时会列出当前可安装的条目。无法更新来源时命令会报错，可进入交互流程选择已验证的旧缓存。
+`skill install` 根据最新正式 Tag 校验技能 ID，只安装到 `--tool` 指定的已安装宿主；可一次给多个 ID，或 `--all` 装全部。技能 ID 不存在时会列出当前可安装的条目。无法更新来源时命令会报错，可进入交互流程选择已验证的旧缓存。
+
+`skill uninstall` 完全离线，只删除该宿主上带 `managed-by: luminae-helper` 的技能；可给多个 ID，或 `--all` 卸载该宿主全部受管技能。
 
 ### 安装插件
 
