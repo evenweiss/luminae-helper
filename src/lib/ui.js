@@ -292,10 +292,15 @@ async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
     const tool = TOOLS.find(t => t.id === toolId);
     for (const skillId of skillIds) {
       const skill = SKILLS.find(item => item.id === skillId);
-      if (tool && skill) rows.push([tool.name, skill.name]);
+      if (!tool || !skill) continue;
+      const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
+      const status = target
+        ? `待${actionLabel}`
+        : isUninstall ? "未安装" : "不支持";
+      rows.push([tool.name, skill.name, status]);
     }
   }
-  printTable(`待${actionLabel}内容`, ["工具", "技能"], rows);
+  printTable(`待${actionLabel}内容`, ["工具", "技能", "状态"], rows);
 
   const ans = await pick(
     {

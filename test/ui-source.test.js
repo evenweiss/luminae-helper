@@ -112,11 +112,12 @@ it("labels uninstall combinations missing on a tool as 未安装", async () => {
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "SKILL.md"), `---\nname: ${id}\nmanaged-by: luminae-helper\n---\nbody`);
   }
-  prompts.checkbox.mockResolvedValueOnce(["matrix-a", "matrix-b"]).mockResolvedValueOnce(["codex", "cursor"]);
+  prompts.checkbox.mockResolvedValueOnce(["dir:matrix-a", "dir:matrix-b"]).mockResolvedValueOnce(["codex", "cursor"]);
   prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill")
     .mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toContain("待卸载");
   expect(output).toContain("未安装");
   expect(output).not.toContain("不支持");
   expect(output).not.toContain("不适用");
