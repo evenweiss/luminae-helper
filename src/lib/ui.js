@@ -417,7 +417,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
 
   console.log();
   if (allSuccess) {
-    console.log(chalk.green(TERM_GUTTER + "✅ 操作完成！\n"));
+    console.log(chalk.green(TERM_GUTTER + `✅ ${isUninstall ? "已卸载" : "已安装"} ${resultRows.length} 项\n`));
   } else {
     const parts = [];
     if (retryableFailedKeys.size > 0) parts.push(`${retryableFailedKeys.size} 项可重试`);
@@ -601,6 +601,9 @@ async function runInteractivePluginInstall(session) {
       await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
       return "back";
     }
+    if (session.usedFallback) {
+      console.log(chalk.yellow(TERM_GUTTER + `⚠ 使用旧缓存 ${source.tag} · ${source.commit.slice(0, 7)}（未确认最新）`));
+    }
     const catalog = listAllManagedPlugins(source.root);
     if (!catalog.length) throw new Error("技能仓库当前没有可安装的插件。");
 
@@ -691,7 +694,7 @@ async function runInteractivePluginInstall(session) {
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
     }
-    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${source.tag}（${source.commit.slice(0, 7)}）`));
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${source.tag}（${source.commit.slice(0, 7)}）${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
     else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
@@ -778,20 +781,23 @@ async function runInteractivePluginUninstall() {
 
   await afterPromptFlush();
   printBanner();
-  printSectionTitle("━━━ 卸载结果 ━━━");
+  printSectionTitle("━━━ 执行中 ━━━");
   const rows = [];
   let ok = 0;
   let failed = 0;
+  let current = 0;
   for (const [hostId, names] of selected) {
     const host = hosts.find(tool => tool.id === hostId);
     for (const name of names) {
+      current += 1;
+      console.log(chalk.gray(TERM_GUTTER + `正在卸载 ${current}/${total}：${name} → ${host.name}`));
       try {
         await uninstallPlugin(name, hostId);
         ok += 1;
         rows.push({ toolName: host.name, skillName: name, status: chalk.green("已卸载"), mode: "插件" });
       } catch (error) {
         failed += 1;
-        rows.push({ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件" });
+        rows.push({ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件", reason: error.message });
         console.log(chalk.red(TERM_GUTTER + error.message));
       }
     }
@@ -886,6 +892,7 @@ async function ensureSource(session) {
   console.log(TERM_GUTTER + "正在拉取技能仓库最新版本…");
   try {
     const source = await refreshPublicSource();
+    console.log(chalk.gray(TERM_GUTTER + `已拉取技能仓库 ${source.tag} · ${source.commit.slice(0, 7)}`));
     session.source = source;
     session.pullRequired = false;
     return source;

@@ -33,6 +33,7 @@ it("loads runtime skills before offering the install list", async () => {
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
+  expect(console.log.mock.calls.flat().join("\n")).toMatch(/已拉取技能仓库 0\.3\.0/);
 });
 
 it("reuses the startup inventory when entering the installed view", async () => {
@@ -160,12 +161,15 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   plugins.listInstalledPlugins.mockImplementation(host => (
     host === "codex" ? [{ name: "a" }, { name: "b" }] : [{ name: "c" }]
   ));
-  plugins.uninstallPlugin.mockResolvedValue({ pluginId: "x" });
+  plugins.uninstallPlugin.mockImplementation(name => name === "b" ? Promise.reject(new Error("boom")) : Promise.resolve({ pluginId: name }));
   prompts.checkbox.mockResolvedValueOnce(["codex", "claude-code"])
     .mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["c"]);
   prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm");
   await runInteractive();
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
+  const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toMatch(/正在卸载 2\/3：b/);
+  expect(output).toContain("boom");
 });
 
 it("installs plugins immediately after choosing plugins and hosts", async () => {
