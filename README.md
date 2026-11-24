@@ -50,7 +50,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。留空使用技能仓库最新正式 Tag 里的插件清单（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。输入本地插件目录可安装该宿主兼容的外部包。命令行仍按单个插件、单个宿主执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。插件清单来自技能仓库最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex
@@ -62,7 +62,7 @@ luminae-helper plugin install my-plugin --tool claude-code --source "/path/to/lo
 luminae-helper plugin uninstall ai-development-workflow --tool cursor
 ```
 
-省略 `--tool` 时使用 Codex。`--source` 接受独立插件目录和本地来源目录。各宿主的清单和安装方式：
+省略 `--tool` 时使用 Codex。`--source` 接受独立插件目录和本地来源目录，仅用于本地调试（交互流程不提供该入口）。各宿主的清单和安装方式：
 
 | 宿主 | 清单 | 安装方式 |
 |------|------|----------|

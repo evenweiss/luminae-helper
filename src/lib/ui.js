@@ -7,7 +7,7 @@ import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkill
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 import { collectInstalled } from "./inventory.js";
-import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, readLocalPluginSource, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
+import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
@@ -635,18 +635,13 @@ async function runInteractivePluginInstall() {
   }
   let snapshot = null;
   try {
-    const sourceDir = (await input({ message: "本地插件目录（留空使用技能仓库最新版本）:" }, inquirerContext)).trim();
-    const local = sourceDir || null;
-    if (!local) {
-      console.log(TERM_GUTTER + "正在检查插件正式版本…");
-      snapshot = await refreshPublicSource();
-    }
+    console.log(TERM_GUTTER + "正在检查插件正式版本…");
+    snapshot = await refreshPublicSource();
     const pluginsByHost = new Map();
     for (const hostId of hostIds) {
       const label = toolById.get(hostId).name;
       try {
-        const plugins = local ? readLocalPluginSource(local, hostId).plugins : listManagedPlugins(hostId, snapshot.root);
-        pluginsByHost.set(hostId, plugins);
+        pluginsByHost.set(hostId, listManagedPlugins(hostId, snapshot.root));
       } catch (error) {
         console.log(chalk.yellow(TERM_GUTTER + `- ${label} 不可用：${error.message}`));
       }
@@ -679,7 +674,7 @@ async function runInteractivePluginInstall() {
       selected = result;
     }
     const confirmation = await pick({
-      message: `安装 ${selected.length} 个插件到 ${hostNames}${local ? `（本地 ${local}）` : `（技能仓库 ${snapshot.tag}）`}？`,
+      message: `安装 ${selected.length} 个插件到 ${hostNames}（技能仓库 ${snapshot.tag}）？`,
       choices: [
         { name: "返回上一步", value: "back" },
         { name: "确认安装", value: "confirm" },
@@ -707,12 +702,12 @@ async function runInteractivePluginInstall() {
       const toolName = toolById.get(hostId).name;
       console.log(chalk.gray(TERM_GUTTER + `正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`));
       try {
-        const { version } = await installPlugin(name, local ?? undefined, hostId, snapshot?.root);
+        const { version } = await installPlugin(name, undefined, hostId, snapshot.root);
         ok += 1;
-        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: local ? "本地插件" : "插件", ok: true, hostId });
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: "插件", ok: true, hostId });
       } catch (error) {
         failed += 1;
-        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: "失败", mode: local ? "本地插件" : "插件", ok: false, hostId });
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: "失败", mode: "插件", ok: false, hostId });
         console.log(chalk.red(TERM_GUTTER + `  ${error.message}`));
       }
     }
@@ -720,7 +715,7 @@ async function runInteractivePluginInstall() {
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
     }
-    if (snapshot) console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`));
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
   } catch (error) {

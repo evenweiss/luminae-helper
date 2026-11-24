@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 const prompts = vi.hoisted(() => ({ select: vi.fn(), input: vi.fn(), checkbox: vi.fn() }));
-const plugins = vi.hoisted(() => ({ PLUGIN_HOSTS: ["codex", "claude-code"], listManagedPlugins: vi.fn(), listInstalledPlugins: vi.fn(), readLocalPluginSource: vi.fn(), installPlugin: vi.fn(), uninstallPlugin: vi.fn(), pluginHostNote: vi.fn(() => ""), printPluginResult: vi.fn() }));
+const plugins = vi.hoisted(() => ({ PLUGIN_HOSTS: ["codex", "claude-code"], listManagedPlugins: vi.fn(), listInstalledPlugins: vi.fn(), installPlugin: vi.fn(), uninstallPlugin: vi.fn(), pluginHostNote: vi.fn(() => ""), printPluginResult: vi.fn() }));
 vi.mock("../src/lib/codex-plugin.js", () => plugins);
 const source = vi.hoisted(() => ({ refreshPublicSource: vi.fn(), acquireCachedSource: vi.fn(), publicSourceOptions: () => ({}) }));
 const inventory = vi.hoisted(() => ({ collectInstalled: vi.fn() }));
@@ -108,21 +108,21 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
 });
 
-it.each([true, false])("uses the shared plugin installer only after interactive confirmation=%s", async (confirm) => {
-  const selected = { name: "workflow" };
-  plugins.readLocalPluginSource.mockReturnValue({ directory: "/fixture/local source", plugins: [selected] });
-  plugins.installPlugin.mockResolvedValue({ pluginId: `${selected.name}@local`, version: "1.2.3" });
-  prompts.input.mockResolvedValueOnce("/fixture/local source");
-  prompts.checkbox.mockResolvedValueOnce(["codex"]).mockResolvedValueOnce([selected.name]);
+it.each([true, false])("installs plugins only after interactive confirmation=%s", async (confirm) => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
+  plugins.listManagedPlugins.mockReturnValue([{ name: "workflow" }]);
+  plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
+  prompts.checkbox.mockResolvedValueOnce(["codex"]).mockResolvedValueOnce(["workflow"]);
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin")
     .mockResolvedValueOnce(confirm ? "confirm" : "back").mockResolvedValueOnce("exit");
   await runInteractive();
-  expect(source.refreshPublicSource).not.toHaveBeenCalled();
-  if (confirm) expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith(selected.name, "/fixture/local source", "codex", undefined);
+  expect(source.refreshPublicSource).toHaveBeenCalledTimes(1);
+  if (confirm) expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("workflow", undefined, "codex", snapshot.root);
   else expect(plugins.installPlugin).not.toHaveBeenCalled();
 });
 
-it("offers only the Helper catalog when no local source is supplied", async () => {
+it("offers the Helper catalog for the selected host", async () => {
   const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listManagedPlugins.mockReturnValue([{ name: "ai-development-workflow" }]);
@@ -134,7 +134,6 @@ it("offers only the Helper catalog when no local source is supplied", async () =
     .map(choice => choice.value)).toEqual(["ai-development-workflow"]);
   expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "codex", snapshot.root);
   expect(snapshot.release).toHaveBeenCalled();
-  expect(plugins.readLocalPluginSource).not.toHaveBeenCalled();
 });
 
 it("selects the Claude Code catalog and installs in the selected host", async () => {
