@@ -282,7 +282,6 @@ export default createPrompt((config, done) => {
   const indentedPage = page.split("\n").map((line) => " " + line).join("\n");
   const lines = [
     [prefix, message].filter(Boolean).join(" "),
-    " ",
     indentedPage,
     " ",
     description ? theme.style.description(description) : "",
