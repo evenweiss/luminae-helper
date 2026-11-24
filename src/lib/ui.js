@@ -47,7 +47,7 @@ let publicSourceLabel = "";
 
 function printBanner() {
   console.clear();
-  const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("  LUMINAE HELPER  ");
+  const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("LUMINAE HELPER");
   console.log("\n" + TERM_GUTTER + banner);
   console.log(chalk.gray(TERM_GUTTER + "AI coding tools' skills manager\n"));
   if (publicSourceLabel) console.log(TERM_GUTTER + publicSourceLabel + "\n");
@@ -952,7 +952,7 @@ async function ensureSource(session) {
 
 export async function runInteractive() {
   const startup = await loadStartupStatus();
-  console.clear();
+  printBanner();
   printStartupStatus(startup);
   const session = {
     pullRequired: needsPull(startup),
