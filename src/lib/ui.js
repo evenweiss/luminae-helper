@@ -338,6 +338,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const resultRows = [];
   const total = tids.length * sids.length;
   let current = 0;
+  let successCount = 0;
+  let notInstalledCount = 0;
 
   for (const toolId of tids) {
     const tool = TOOLS.find(t => t.id === toolId);
@@ -364,15 +366,26 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
 
       const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
       if (!target) {
-        resultRows.push({
-          key,
-          toolName: tool.name,
-          skillName: skill.name,
-          status: chalk.yellow("不支持"),
-          mode: "不适用",
-        });
-        allSuccess = false;
-        permanentFailedKeys.add(key);
+        if (isUninstall) {
+          resultRows.push({
+            key,
+            toolName: tool.name,
+            skillName: skill.name,
+            status: chalk.yellow("未安装"),
+            mode: "—",
+          });
+          notInstalledCount += 1;
+        } else {
+          resultRows.push({
+            key,
+            toolName: tool.name,
+            skillName: skill.name,
+            status: chalk.yellow("不支持"),
+            mode: "不适用",
+          });
+          allSuccess = false;
+          permanentFailedKeys.add(key);
+        }
         continue;
       }
 
@@ -386,6 +399,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             status: chalk.green("已卸载"),
             mode: installModeDescription(target),
           });
+          successCount += 1;
         } else {
           resultRows.push({
             key,
@@ -408,6 +422,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             status: chalk.green("已安装"),
             mode: installModeDescription(target),
           });
+          successCount += 1;
         } else if (result.skipped) {
           resultRows.push({
             key,
@@ -438,7 +453,14 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   clearProgress();
   console.log();
   if (allSuccess) {
-    console.log(chalk.green(TERM_GUTTER + `✅ ${isUninstall ? "已卸载" : "已安装"} ${resultRows.length} 项\n`));
+    if (successCount > 0) {
+      console.log(chalk.green(TERM_GUTTER + `✅ ${isUninstall ? "已卸载" : "已安装"} ${successCount} 项\n`));
+      if (isUninstall && notInstalledCount > 0) {
+        console.log(chalk.gray(TERM_GUTTER + `${notInstalledCount} 项未安装，已跳过\n`));
+      }
+    } else {
+      console.log(chalk.gray(TERM_GUTTER + `没有需要${isUninstall ? "卸载" : "安装"}的内容（${notInstalledCount} 项未安装）\n`));
+    }
   } else {
     const parts = [];
     if (retryableFailedKeys.size > 0) parts.push(`${retryableFailedKeys.size} 项可重试`);

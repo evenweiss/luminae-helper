@@ -106,6 +106,22 @@ it("starts the uninstall skill list with nothing selected", async () => {
   expect(selectable.length).toBeGreaterThan(0);
   expect(selectable.every(choice => choice.checked === false)).toBe(true);
 });
+it("labels uninstall combinations missing on a tool as 未安装", async () => {
+  for (const id of ["matrix-a", "matrix-b"]) {
+    const directory = join(root, `home/.codex/skills/${id}`);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "SKILL.md"), `---\nname: ${id}\nmanaged-by: luminae-helper\n---\nbody`);
+  }
+  prompts.checkbox.mockResolvedValueOnce(["matrix-a", "matrix-b"]).mockResolvedValueOnce(["codex", "cursor"]);
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill")
+    .mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  await runInteractive();
+  const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toContain("未安装");
+  expect(output).not.toContain("不支持");
+  expect(output).not.toContain("不适用");
+});
+
 it.each([false, true])("only loads stale cache after explicit consent=%s", async (consent) => {
   source.refreshPublicSource.mockRejectedValue(new Error("offline"));
   source.acquireCachedSource.mockReturnValue({ root, tag: "0.2.0", commit: "old" });
