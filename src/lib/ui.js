@@ -869,13 +869,13 @@ function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError 
   }
   if (inventoryError) {
     console.log(chalk.yellow(`⚠ 已安装内容扫描失败：${inventoryError}`));
-    console.log(color(line));
+    console.log(color(line) + "\n");
     return;
   }
   const parts = [];
   if (skills) parts.push(`技能 ${skills}`);
   if (plugins) parts.push(`插件 ${plugins}`);
-  console.log(color(`${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`));
+  console.log(color(`${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`) + "\n");
 }
 
 async function loadStartupStatus() {
