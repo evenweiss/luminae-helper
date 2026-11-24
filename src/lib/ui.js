@@ -14,6 +14,7 @@ import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugi
  * 所有面向用户的 `console.log` / 区块标题应以此开头，避免有的顶格、有的多空格。
  */
 export const TERM_GUTTER = "  ";
+const PROMPT_PREFIX = chalk.cyan.bold("  ▌");
 
 /**
  * 传给所有 @inquirer prompt 的 context。
@@ -194,7 +195,7 @@ async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步"
     }));
 
     const theme = {
-      prefix: chalk.cyan(" ◆"),
+      prefix: PROMPT_PREFIX,
       style: { highlight: (t) => chalk.cyan(t) },
     };
 
@@ -232,7 +233,7 @@ async function stepSelectTools(installedTools, actionLabel = "下一步") {
     }));
 
     const theme = {
-      prefix: chalk.cyan(" ◆"),
+      prefix: PROMPT_PREFIX,
       style: { highlight: (t) => chalk.cyan(t) },
     };
 
@@ -293,7 +294,7 @@ async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
         { name: "↩ 返回上一步", value: "back" },
         { name: "✕ 退出", value: "exit" },
       ],
-      theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+      theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
     }
   ).catch(() => "back");
 
@@ -451,7 +452,7 @@ async function runFlow(isUninstall, session) {
     await input(
       {
         message: "按回车返回主菜单...",
-        theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+        theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
       },
       inquirerContext
     ).catch(() => {});
@@ -508,7 +509,7 @@ async function runFlow(isUninstall, session) {
         await input(
           {
             message: "按任意键退出...",
-            theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+            theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
         ).catch(() => {});
@@ -536,7 +537,7 @@ async function runFlow(isUninstall, session) {
             await input(
               {
                 message: "按任意键退出...",
-                theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+                theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
             ).catch(() => {});
@@ -548,7 +549,7 @@ async function runFlow(isUninstall, session) {
             await input(
               {
                 message: "按任意键返回主菜单...",
-                theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+                theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
             ).catch(() => {});
@@ -561,7 +562,7 @@ async function runFlow(isUninstall, session) {
           await input(
             {
               message: "按任意键返回主菜单...",
-              theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+              theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
             },
             inquirerContext
           ).catch(() => {});
@@ -572,7 +573,7 @@ async function runFlow(isUninstall, session) {
         await input(
           {
             message: "按任意键返回主菜单...",
-            theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+            theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
         ).catch(() => {});
@@ -589,6 +590,7 @@ async function selectKind(message) {
       { name: "技能", value: "skill" },
       { name: "插件", value: "plugin" },
     ], "↩ 返回主菜单"),
+    theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
   });
 }
 
@@ -603,7 +605,7 @@ async function runInteractivePluginInstall(session) {
     return "back";
   }
   const toolById = new Map(tools.map(tool => [tool.id, tool]));
-  const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
+  const theme = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
   try {
     const source = await ensureSource(session);
     if (!source) {
@@ -749,7 +751,7 @@ async function runInteractivePluginUninstall() {
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
-  const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
+  const theme = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 
   let hostIds = [];
   while (!hostIds.length) {
@@ -978,7 +980,7 @@ export async function runInteractive() {
             { name: padChoice(" 已安装", 20), value: "list" },
             { name: padChoice(" 退出", 20), value: "exit" },
           ],
-          theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+          theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
         }
       ).catch(() => "exit");
 
