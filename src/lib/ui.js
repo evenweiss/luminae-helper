@@ -288,6 +288,7 @@ async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
   const actionLabel = isUninstall ? "卸载" : "安装";
   printSectionTitle("━━━ " + actionLabel + "预览 ━━━");
   const rows = [];
+  let actionable = 0;
   for (const toolId of toolIds) {
     const tool = TOOLS.find(t => t.id === toolId);
     for (const skillId of skillIds) {
@@ -297,10 +298,17 @@ async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
       const status = target
         ? `待${actionLabel}`
         : isUninstall ? "未安装" : "不支持";
+      if (target) actionable += 1;
       rows.push([tool.name, skill.name, status]);
     }
   }
   printTable(`待${actionLabel}内容`, ["工具", "技能", "状态"], rows);
+
+  if (isUninstall && actionable === 0) {
+    console.log(chalk.gray(TERM_GUTTER + `没有需要卸载的内容（${rows.length} 项未安装）。`));
+    await input({ message: "按回车返回上一步…" }, inquirerContext).catch(() => {});
+    return "back";
+  }
 
   const ans = await pick(
     {

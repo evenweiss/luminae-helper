@@ -123,6 +123,19 @@ it("labels uninstall combinations missing on a tool as 未安装", async () => {
   expect(output).not.toContain("不适用");
 });
 
+it("does not enter execution when every uninstall row is missing", async () => {
+  const directory = join(root, "home/.codex/skills/empty-a");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "SKILL.md"), "---\nname: empty-a\nmanaged-by: luminae-helper\n---\nbody");
+  prompts.checkbox.mockResolvedValueOnce(["dir:empty-a"]).mockResolvedValueOnce(["cursor"])
+    .mockResolvedValueOnce(["__back__"]).mockResolvedValueOnce(["__back__"]);
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
+  await runInteractive();
+  const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toContain("没有需要卸载的内容（1 项未安装）");
+  expect(output).not.toContain("执行中");
+});
+
 it.each([false, true])("only loads stale cache after explicit consent=%s", async (consent) => {
   source.refreshPublicSource.mockRejectedValue(new Error("offline"));
   source.acquireCachedSource.mockReturnValue({ root, tag: "0.2.0", commit: "old" });
