@@ -649,15 +649,11 @@ async function runInteractivePluginInstall() {
     }
     const selected = selectedNames.map(name => catalog.find(plugin => plugin.name === name));
 
-    const supportCount = hostId => selected.filter(plugin => plugin.hosts.includes(hostId)).length;
     let hostIds = [];
     while (!hostIds.length) {
       const answer = await runCheckbox({
         message: "选择宿主:",
-        choices: withNavChoices(tools.map(tool => ({
-          name: `${tool.name}（支持 ${supportCount(tool.id)}/${selected.length}）`,
-          value: tool.id,
-        })), "↩ 返回主菜单"),
+        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
         loop: false,
         theme,
       });
@@ -681,31 +677,14 @@ async function runInteractivePluginInstall() {
       }
     }
 
-    printSectionTitle("━━━ 安装预览 ━━━");
-    for (const plugin of selected) {
-      const targets = hostIds.filter(hostId => plugin.hosts.includes(hostId)).map(hostId => toolById.get(hostId).name);
-      console.log(TERM_GUTTER + `${plugin.name} → ${targets.length ? targets.join("、") : "无"}`);
-    }
-    for (const item of skipped) {
-      console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
-    }
     if (!combos.length) {
+      for (const item of skipped) {
+        console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
+      }
       console.log(chalk.yellow(TERM_GUTTER + "所选插件和宿主没有可安装的组合。\n"));
       await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
       return "back";
     }
-
-    const hostNames = hostIds.map(id => toolById.get(id).name).join("、");
-    const confirmation = await pick({
-      message: `安装 ${selected.length} 个插件到 ${hostNames}（技能仓库 ${snapshot.tag}）？`,
-      choices: [
-        { name: "返回上一步", value: "back" },
-        { name: "确认安装", value: "confirm" },
-        { name: "退出", value: "exit" },
-      ],
-    });
-    if (confirmation === "back") return "back";
-    if (confirmation !== "confirm") return "exit";
 
     printSectionTitle("━━━ 执行中 ━━━");
     const rows = [];

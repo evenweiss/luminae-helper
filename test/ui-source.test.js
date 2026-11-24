@@ -108,18 +108,16 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
 });
 
-it.each([true, false])("installs plugins only after interactive confirmation=%s", async (confirm) => {
+it("installs plugins immediately after choosing plugins and hosts", async () => {
   const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin")
-    .mockResolvedValueOnce(confirm ? "confirm" : "back").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(source.refreshPublicSource).toHaveBeenCalledTimes(1);
-  if (confirm) expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("workflow", undefined, "codex", snapshot.root);
-  else expect(plugins.installPlugin).not.toHaveBeenCalled();
+  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("workflow", undefined, "codex", snapshot.root);
 });
 
 it("offers the aggregated plugin catalog before host selection", async () => {
@@ -127,7 +125,7 @@ it("offers the aggregated plugin catalog before host selection", async () => {
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "ai-development-workflow", hosts: ["codex", "claude-code"] }]);
   prompts.checkbox.mockResolvedValueOnce(["ai-development-workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   const selection = prompts.checkbox.mock.calls.find(([config]) => config.message === "选择插件:")[0];
   expect(selection.choices.filter(choice => choice.value && !choice.value.startsWith("__"))
@@ -142,7 +140,7 @@ it("installs a plugin in the selected compatible host", async () => {
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "ai-development-workflow", hosts: ["codex", "claude-code"] }]);
   prompts.checkbox.mockResolvedValueOnce(["ai-development-workflow"]).mockResolvedValueOnce(["claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "claude-code", snapshot.root);
 });
@@ -156,7 +154,7 @@ it("installs every selected plugin into every selected host", async () => {
   ]);
   plugins.installPlugin.mockImplementation((name, _source, host) => Promise.resolve({ pluginId: `${name}@luminae-helper`, version: `${host}-${name}` }));
   prompts.checkbox.mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["codex", "claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin.mock.calls).toEqual([
     ["a", undefined, "codex", snapshot.root], ["b", undefined, "codex", snapshot.root],
@@ -175,16 +173,15 @@ it("installs only supported combinations and reports skipped ones with reasons",
   ]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "x", version: "1.0.0" });
   prompts.checkbox.mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["codex", "claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin.mock.calls).toEqual([
     ["a", undefined, "codex", snapshot.root],
     ["b", undefined, "claude-code", snapshot.root],
   ]);
   const output = console.log.mock.calls.map(([line]) => String(line)).join("\n");
-  expect(output).toContain("跳过 a → Claude Code：该宿主清单中没有此插件");
-  expect(output).toContain("跳过 b → Codex：该宿主清单中没有此插件");
   expect(output).toContain("不支持");
+  expect(output).toContain("该宿主清单中没有此插件");
   expect(output).toContain("2 项不支持已跳过");
 });
 
