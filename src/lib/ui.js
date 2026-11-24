@@ -819,24 +819,34 @@ async function runInteractivePluginUninstall() {
 }
 
 // ── Main ──
-function printStartupStatus({ inventory, remoteTag, remoteError }) {
+function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError }) {
   const { rows, source } = inventory;
   const skills = rows.filter(row => row.type === "技能").length;
   const plugins = rows.filter(row => row.type === "插件").length;
-  if (source) console.log(chalk.gray(TERM_GUTTER + `技能快照 ${source.tag} · ${source.commit.slice(0, 7)}`));
-  else console.log(chalk.gray(TERM_GUTTER + "技能快照：无（首次安装时下载）"));
-  if (remoteTag) {
-    if (!source) console.log(chalk.gray(TERM_GUTTER + `可安装版本：${remoteTag}（本地无快照）`));
-    else if (remoteTag.replace(/^v/, "") !== source.tag.replace(/^v/, "")) {
-      console.log(chalk.yellow(TERM_GUTTER + `有可用更新：${remoteTag}（本地 ${source.tag}）`));
-    } else console.log(chalk.green(TERM_GUTTER + `技能与插件已是最新（${remoteTag}）`));
+  let line;
+  let color = chalk.gray;
+  if (remoteError) {
+    const reason = remoteError.replace(/^无法获取技能与插件源：/, "").replace(/。$/, "");
+    line = `⚠ 无法检查更新：${reason}，安装时会重试`;
+    color = chalk.yellow;
+  } else if (!source) {
+    line = `可安装版本 ${remoteTag}（本地无快照）`;
+  } else if (remoteTag !== source.tag) {
+    line = `技能与插件 ${remoteTag}（本地 ${source.tag}，安装时更新）`;
+    color = chalk.yellow;
   } else {
-    console.log(chalk.gray(TERM_GUTTER + `无法检查技能与插件更新：${remoteError}`));
+    line = `技能与插件 ${source.tag}（已是最新）`;
+    color = chalk.green;
+  }
+  if (inventoryError) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装内容扫描失败：${inventoryError}`));
+    console.log(color(TERM_GUTTER + line));
+    return;
   }
   const parts = [];
   if (skills) parts.push(`技能 ${skills}`);
   if (plugins) parts.push(`插件 ${plugins}`);
-  console.log(chalk.gray(TERM_GUTTER + `已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`));
+  console.log(color(TERM_GUTTER + `${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`));
 }
 
 async function loadStartupStatus() {
@@ -912,12 +922,9 @@ async function ensureSource(session) {
 }
 
 export async function runInteractive() {
-  printBanner();
   const startup = await loadStartupStatus();
+  console.clear();
   printStartupStatus(startup);
-  if (startup.inventoryError) {
-    console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装内容扫描失败：${startup.inventoryError}`));
-  }
   const session = {
     pullRequired: needsPull(startup),
     source: null,

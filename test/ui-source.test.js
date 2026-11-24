@@ -72,7 +72,7 @@ it("shows a startup check failure without blocking the menu", async () => {
   prompts.select.mockResolvedValueOnce("exit");
   await runInteractive();
   const output = console.log.mock.calls.map(([line]) => String(line)).join("\n");
-  expect(output).toContain("无法检查技能与插件更新：网络不可用");
+  expect(output).toContain("无法检查更新：网络不可用，安装时会重试");
 });
 
 it("starts the uninstall skill list with nothing selected", async () => {
