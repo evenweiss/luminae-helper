@@ -170,6 +170,27 @@ it("releases a cache lease when the user declines it", async () => {
   await runInteractive(); expect(release).toHaveBeenCalledExactlyOnceWith();
 });
 
+it("steps back through plugin selection, tools and confirmation", async () => {
+  source.refreshPublicSource.mockResolvedValue({ root, tag: "0.1.0", commit: "abcdef1234", release: vi.fn() });
+  plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
+  plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
+  prompts.checkbox.mockResolvedValueOnce(["workflow"])
+    .mockResolvedValueOnce(["__back__"])
+    .mockResolvedValueOnce(["workflow"])
+    .mockResolvedValueOnce(["codex"])
+    .mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin")
+    .mockResolvedValueOnce("back").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+  await runInteractive();
+  const pluginStep = prompts.checkbox.mock.calls[0][0];
+  const toolStep = prompts.checkbox.mock.calls[1][0];
+  const confirmStep = prompts.select.mock.calls[2][0];
+  expect(pluginStep.choices.find(choice => choice.value === "__back__").name).toBe("↩ 返回主菜单");
+  expect(toolStep.choices.find(choice => choice.value === "__back__").name).toBe("↩ 上一步");
+  expect(confirmStep.choices.find(choice => choice.value === "back").name).toBe("↩ 上一步");
+  expect(plugins.installPlugin).toHaveBeenCalledTimes(1);
+});
+
 it("uninstalls a managed plugin after confirming the host", async () => {
   plugins.listInstalledPlugins.mockImplementation(host => host === "codex" ? [{ name: "workflow" }] : []);
   plugins.uninstallPlugin.mockResolvedValue({ pluginId: "workflow" });

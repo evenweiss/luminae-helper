@@ -252,7 +252,7 @@ async function stepSelectTools(installedTools, actionLabel = "下一步") {
     // 第二步：底部为返回/退出功能行（移上后回车触发）
     const ans = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出", actionLabel),
+      choices: withNavChoices(toolChoices, "↩ 上一步", "✕ 退出", actionLabel),
       loop: false,
       theme,
     });
@@ -303,7 +303,7 @@ async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
       message: "确认" + actionLabel + "？",
       choices: [
         { name: "✓ 确认" + actionLabel, value: "confirm" },
-        { name: "↩ 返回上一步", value: "back" },
+        { name: "↩ 上一步", value: "back" },
         { name: "✕ 退出", value: "exit" },
       ],
     }
@@ -631,83 +631,101 @@ async function runInteractivePluginInstall(session) {
     const catalog = listAllManagedPlugins(source.root);
     if (!catalog.length) throw new Error("当前没有可安装的插件。");
 
-    let selectedNames = [];
-    while (!selectedNames.length) {
-      const answer = await runCheckbox({
-        message: "选择插件:",
-        choices: withNavChoices(catalog.map(plugin => ({
-          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
-          value: plugin.name,
-        })), "↩ 返回主菜单", "✕ 退出", "下一步"),
-        loop: false,
-        theme,
-      });
-      const result = parseCheckboxResult(answer);
-      if (result === "back") return "back";
-      if (result === "exit") return "exit";
-      if (!result.length) {
-        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
-        await new Promise(r => setTimeout(r, 1200));
-        continue;
-      }
-      selectedNames = result;
-    }
-    const selected = selectedNames.map(name => catalog.find(plugin => plugin.name === name));
-
+    let stage = 1;
+    let selected = [];
     let hostIds = [];
-    while (!hostIds.length) {
-      const answer = await runCheckbox({
-        message: "选择工具:",
-        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
-        loop: false,
-        theme,
-      });
-      const result = parseCheckboxResult(answer);
-      if (result === "back") return "back";
-      if (result === "exit") return "exit";
-      if (!result.length) {
-        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
-        await new Promise(r => setTimeout(r, 1200));
+    let combos = [];
+    let skipped = [];
+    while (true) {
+      if (stage === 1) {
+        let selectedNames = [];
+        while (!selectedNames.length) {
+          const answer = await runCheckbox({
+            message: "选择插件:",
+            choices: withNavChoices(catalog.map(plugin => ({
+              name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+              value: plugin.name,
+            })), "↩ 返回主菜单", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") return "back";
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          selectedNames = result;
+        }
+        selected = selectedNames.map(name => catalog.find(plugin => plugin.name === name));
+        stage = 2;
         continue;
       }
-      hostIds = result;
-    }
 
-    const combos = [];
-    const skipped = [];
-    for (const hostId of hostIds) {
-      for (const plugin of selected) {
-        if (plugin.hosts.includes(hostId)) combos.push({ hostId, name: plugin.name });
-        else skipped.push({ hostId, name: plugin.name, reason: "该工具清单中没有此插件" });
+      if (stage === 2) {
+        let nextHostIds = [];
+        while (!nextHostIds.length) {
+          const answer = await runCheckbox({
+            message: "选择工具:",
+            choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 上一步", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") { stage = 1; break; }
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          nextHostIds = result;
+        }
+        if (stage === 1) continue;
+        hostIds = nextHostIds;
+        stage = 3;
+        continue;
       }
-    }
 
-    if (!combos.length) {
-      for (const item of skipped) {
-        console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
+      combos = [];
+      skipped = [];
+      for (const hostId of hostIds) {
+        for (const plugin of selected) {
+          if (plugin.hosts.includes(hostId)) combos.push({ hostId, name: plugin.name });
+          else skipped.push({ hostId, name: plugin.name, reason: "该工具清单中没有此插件" });
+        }
       }
-      console.log(chalk.yellow(TERM_GUTTER + "所选插件和工具没有可安装的组合。\n"));
-      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
-      return "back";
-    }
 
-    await afterPromptFlush();
-    printBanner();
-    printSectionTitle("━━━ 安装预览 ━━━");
-    printTable("待安装内容", ["工具", "插件", "状态"], [
-      ...combos.map(item => [toolById.get(item.hostId).name, item.name, "待安装"]),
-      ...skipped.map(item => [toolById.get(item.hostId).name, item.name, "不支持"]),
-    ]);
-    const confirmation = await pick({
-      message: "确认安装？",
-      choices: [
-        { name: "✓ 确认安装", value: "confirm" },
-        { name: "↩ 返回主菜单", value: "back" },
-        { name: "✕ 退出", value: "exit" },
-      ],
-    });
-    if (confirmation === "back") return "back";
-    if (confirmation !== "confirm") return "exit";
+      if (!combos.length) {
+        for (const item of skipped) {
+          console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
+        }
+        console.log(chalk.yellow(TERM_GUTTER + "所选插件和工具没有可安装的组合，请重新选择。\n"));
+        stage = 2;
+        continue;
+      }
+
+      await afterPromptFlush();
+      printBanner();
+      printSectionTitle("━━━ 安装预览 ━━━");
+      printTable("待安装内容", ["工具", "插件", "状态"], [
+        ...combos.map(item => [toolById.get(item.hostId).name, item.name, "待安装"]),
+        ...skipped.map(item => [toolById.get(item.hostId).name, item.name, "不支持"]),
+      ]);
+      const confirmation = await pick({
+        message: "确认安装？",
+        choices: [
+          { name: "✓ 确认安装", value: "confirm" },
+          { name: "↩ 上一步", value: "back" },
+          { name: "✕ 退出", value: "exit" },
+        ],
+      });
+      if (confirmation === "back") { stage = 2; continue; }
+      if (confirmation !== "confirm") return "exit";
+      break;
+    }
 
     await afterPromptFlush();
     printBanner();
