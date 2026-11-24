@@ -107,21 +107,34 @@ it("starts the uninstall skill list with nothing selected", async () => {
   expect(selectable.every(choice => choice.checked === false)).toBe(true);
 });
 it("labels uninstall combinations missing on a tool as 未安装", async () => {
-  for (const id of ["matrix-a", "matrix-b"]) {
-    const directory = join(root, `home/.codex/skills/${id}`);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "SKILL.md"), `---\nname: ${id}\nmanaged-by: luminae-helper\n---\nbody`);
+  const isTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+  const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    for (const id of ["matrix-a", "matrix-b"]) {
+      const directory = join(root, `home/.codex/skills/${id}`);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, "SKILL.md"), `---\nname: ${id}\nmanaged-by: luminae-helper\n---\nbody`);
+    }
+    prompts.checkbox.mockResolvedValueOnce(["dir:matrix-a", "dir:matrix-b"]).mockResolvedValueOnce(["codex", "cursor"]);
+    prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill")
+      .mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
+    await runInteractive();
+    const output = console.log.mock.calls.flat().join("\n");
+    expect(output).toContain("待卸载");
+    expect(output).toContain("未安装");
+    expect(output.indexOf("已安装的受管内容（离线卸载）")).toBeLessThan(output.indexOf("执行中"));
+    expect(output).not.toContain("不支持");
+    expect(output).not.toContain("不适用");
+
+    const progress = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(progress).toContain("/2");
+    expect(progress).not.toContain("Hermes Agent");
+  } finally {
+    write.mockRestore();
+    if (isTTY) Object.defineProperty(process.stdout, "isTTY", isTTY);
+    else delete process.stdout.isTTY;
   }
-  prompts.checkbox.mockResolvedValueOnce(["dir:matrix-a", "dir:matrix-b"]).mockResolvedValueOnce(["codex", "cursor"]);
-  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("skill")
-    .mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
-  await runInteractive();
-  const output = console.log.mock.calls.flat().join("\n");
-  expect(output).toContain("待卸载");
-  expect(output).toContain("未安装");
-  expect(output.indexOf("已安装的受管内容（离线卸载）")).toBeLessThan(output.indexOf("执行中"));
-  expect(output).not.toContain("不支持");
-  expect(output).not.toContain("不适用");
 });
 
 it("does not enter execution when every uninstall row is missing", async () => {

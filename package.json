@@ -34,7 +34,7 @@
     "url": "git+https://github.com/evenweiss/luminae-helper.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "^20.17.0 || ^22.13.0 || >=23.5.0"
   },
   "dependencies": {
     "@inquirer/ansi": "^2.0.5",

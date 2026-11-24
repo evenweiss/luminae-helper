@@ -17,15 +17,15 @@ export const TERM_GUTTER = "  ";
 const PROMPT_PREFIX = chalk.cyan.bold(" ▌");
 const PROMPT_THEME = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 const SELECT_THEME = { prefix: chalk.cyan.bold("▌"), style: { highlight: (t) => chalk.cyan(t) } };
-const canAnimateProgress = Boolean(process.stdout.isTTY);
+const canAnimateProgress = () => Boolean(process.stdout.isTTY);
 
 /** 单行进度：覆盖上一行，避免批量操作留下整屏「正在…」。 */
 function showProgress(text) {
-  if (canAnimateProgress) process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray(text)}`);
+  if (canAnimateProgress()) process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray(text)}`);
 }
 
 function clearProgress() {
-  if (canAnimateProgress) process.stdout.write("\r\x1b[2K");
+  if (canAnimateProgress()) process.stdout.write("\r\x1b[2K");
 }
 
 /**
@@ -351,7 +351,13 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const permanentFailedKeys = new Set();
   /** 本轮执行结果，用于最终表格展示 */
   const resultRows = [];
-  const total = tids.length * sids.length;
+  // 进度分母只统计会真正执行的组合，未安装/不支持的行不计入。
+  const total = tids.reduce((count, toolId) => count + sids.filter(skillId => {
+    const key = `${toolId}::${skillId}`;
+    if (failedKeys && !failedKeys.has(key)) return false;
+    const skill = SKILLS.find(s => s.id === skillId);
+    return Boolean(skill?.installTargets?.some(tgt => tgt.toolId === toolId));
+  }).length, 0);
   let current = 0;
   let successCount = 0;
   let notInstalledCount = 0;
@@ -365,7 +371,6 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
     }
 
     for (const skillId of sids) {
-      current += 1;
       const skill = SKILLS.find(s => s.id === skillId);
       if (!skill) {
         clearProgress();
@@ -376,8 +381,6 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
       const key = `${toolId}::${skillId}`;
       // 如果是重试模式，只执行之前失败的组合
       if (failedKeys && !failedKeys.has(key)) continue;
-
-      showProgress(`正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`);
 
       const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
       if (!target) {
@@ -403,6 +406,9 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
         }
         continue;
       }
+
+      current += 1;
+      showProgress(`正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`);
 
       if (isUninstall) {
         const result = uninstallSkillFromTool(skill, tool);
