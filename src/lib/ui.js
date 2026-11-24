@@ -139,14 +139,13 @@ function printResultTable(title, rows) {
 }
 
 export function printInstalledContent(content = collectInstalled()) {
-  const { rows, source } = content;
+  const { rows } = content;
   if (rows.length === 0) {
     console.log(TERM_GUTTER + "没有检测到 Helper 管理的技能或插件。");
   } else {
     printTable("已安装内容", ["类型", "工具", "条目", "版本"],
       rows.map(row => [row.type, row.tool, row.name, row.version]));
   }
-  if (source) console.log(chalk.gray(TERM_GUTTER + `技能来源快照：${source.tag} · ${source.commit.slice(0, 7)}`));
   return rows;
 }
 
