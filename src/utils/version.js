@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
+import { remotePublicTag, readCachedSource } from "../lib/public-source.js";
 
 export const TERM_GUTTER = "  ";
 
@@ -10,9 +11,7 @@ export const TERM_GUTTER = "  ";
  * package.json 在 <package>/，需要上跳两级
  */
 function readPackageJson() {
-  const packageRoot = globalThis.__LUMINAE_PACKAGE_ROOT__ || join(import.meta.dirname, "..", "..");
-  const pkgPath = join(packageRoot, "package.json");
-  return JSON.parse(readFileSync(pkgPath, "utf-8"));
+  return JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "package.json"), "utf-8"));
 }
 
 /**
@@ -97,13 +96,28 @@ export async function checkOutdated() {
 
   if (!latestVersion) {
     console.log(chalk.yellow(TERM_GUTTER + "⚠ 无法获取最新版本信息，请检查网络连接"));
-    return;
-  }
-
-  if (compareSemver(currentVersion, latestVersion) >= 0) {
+  } else if (compareSemver(currentVersion, latestVersion) >= 0) {
     console.log(chalk.green(TERM_GUTTER + `✓ 已是最新版本 (${currentVersion})`));
   } else {
     console.log(chalk.yellow(TERM_GUTTER + `⚠ 发现新版本: ${latestVersion}（当前: ${currentVersion})`));
     console.log(TERM_GUTTER + `  更新命令: npm install -g ${packageName}`);
+  }
+
+  const cached = readCachedSource();
+  let latestTag;
+  try {
+    latestTag = await remotePublicTag();
+  } catch (error) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 无法检查技能与插件更新：${error.message}`));
+    return;
+  }
+  if (!cached) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 本地没有已验证的技能快照（最新 ${latestTag}）`));
+    console.log(TERM_GUTTER + "  安装命令: luminae-helper");
+  } else if (cached.tag === latestTag) {
+    console.log(chalk.green(TERM_GUTTER + `✓ 技能与插件已是最新 (${latestTag})`));
+  } else {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 技能与插件有更新: ${latestTag}（本地 ${cached.tag}）`));
+    console.log(TERM_GUTTER + "  更新命令: luminae-helper");
   }
 }

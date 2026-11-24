@@ -18,7 +18,7 @@ function put(path, text) {
   writeFileSync(path, text);
 }
 function install(skillId = "git-push", tool = "claude-code") {
-  return runCli({ argv: ["skill", "install", skillId, "--tool", tool] });
+  return runCli(["skill", "install", skillId, "--tool", tool]);
 }
 
 beforeEach(() => {
@@ -87,6 +87,43 @@ it("rejects an unsupported or unavailable host before fetching the source", asyn
   expect(await install("identity", "unknown-tool")).toBe(1);
   fixture.commandExists.mockReturnValue(false);
   expect(await install("identity", "codex")).toBe(1);
+  expect(fixture.refresh).not.toHaveBeenCalled();
+});
+
+it("installs several skills in one command", async () => {
+  expect(await runCli(["skill", "install", "git-push", "identity", "--tool", "claude-code"])).toBe(0);
+  expect(existsSync(join(fixture.home, ".claude/skills/git-push/SKILL.md"))).toBe(true);
+  expect(existsSync(join(fixture.home, ".claude/skills/identity/SKILL.md"))).toBe(true);
+});
+
+it("installs every catalog skill with --all", async () => {
+  expect(await runCli(["skill", "install", "--all", "--tool", "claude-code"])).toBe(0);
+  expect(readdirSync(join(fixture.home, ".claude/skills")).sort()).toEqual(["git-push", "identity"]);
+});
+
+it("uninstalls a managed skill without refreshing the source", async () => {
+  await install("git-push");
+  fixture.refresh.mockClear();
+  expect(await runCli(["skill", "uninstall", "git-push", "--tool", "claude-code"])).toBe(0);
+  expect(existsSync(join(fixture.home, ".claude/skills/git-push"))).toBe(false);
+  expect(fixture.refresh).not.toHaveBeenCalled();
+});
+
+it("uninstalls every managed skill from the host with --all", async () => {
+  await install("git-push");
+  await install("identity");
+  expect(await runCli(["skill", "uninstall", "--all", "--tool", "claude-code"])).toBe(0);
+  expect(discoverInstalledSkills()).toEqual([]);
+});
+
+it("reports a skill that was not installed and exits 1", async () => {
+  expect(await runCli(["skill", "uninstall", "identity", "--tool", "claude-code"])).toBe(1);
+  expect(console.error.mock.calls.flat().join(" ")).toContain("没有 Helper 安装的技能");
+});
+
+it("rejects malformed batch arguments and keeps --tool required", async () => {
+  expect(await runCli(["skill", "install", "git-push", "--tool"])).toBe(1);
+  expect(await runCli(["skill", "install", "--all", "identity", "--tool", "codex"])).toBe(1);
   expect(fixture.refresh).not.toHaveBeenCalled();
 });
 

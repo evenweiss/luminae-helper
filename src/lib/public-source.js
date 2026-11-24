@@ -16,12 +16,33 @@ export function publicSourceOptions() {
 function optionsWithDefaults(options) {
   return { ...publicSourceOptions(), ...options };
 }
-async function git(args, cwd) {
-  const { stdout } = await exec("git", args, {
-    cwd, encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C" },
-  });
-  return stdout.trim();
+// 对外统一使用不带 v 的版本号；git ref 仍用原始 tag。
+function normalizeTag(tag) {
+  return tag.replace(/^v/, "");
+}
+async function git(args, cwd, timeout = 30000) {
+  try {
+    const { stdout } = await exec("git", args, {
+      cwd, encoding: "utf8", timeout, maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C" },
+    });
+    return stdout.trim();
+  } catch (error) {
+    if (error?.code === "ENOENT") throw new Error("找不到 Git。请先安装 Git（用于拉取技能与插件源码）。");
+    throw error;
+  }
+}
+
+// 把 git 的网络类失败归并成一句可操作提示，其余错误原样抛出。
+function sourceError(error) {
+  if (error?.message?.startsWith("找不到 Git")) return error;
+  const text = String(error?.stderr || error?.stdout || error?.message || "");
+  if (error?.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error?.signal) || /timed out/i.test(text)) {
+    return new Error("无法获取技能与插件源：网络或代理不可用（请求超时）。");
+  }
+  if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
+  const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
+  return new Error(`无法获取技能与插件源：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
 }
 function publishDirectory(temp, destination) {
   try { renameSync(temp, destination); }
@@ -34,7 +55,9 @@ async function fetchTags(mirror) {
   for (let attempt = 0; ; attempt++) {
     try { return await git(["fetch", "--prune", "--no-tags", "origin", "refs/tags/*:refs/tags/*"], mirror); }
     catch (error) {
-      if (attempt >= 2 || !/cannot lock ref|Unable to create .*\.lock/.test(error.stderr || "")) throw error;
+      const retryable = /cannot lock ref|Unable to create .*\.lock/.test(error.stderr || "")
+        || error.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error.signal);
+      if (attempt >= 2 || !retryable) throw error;
       await delay(200);
     }
   }
@@ -58,7 +81,7 @@ export function readCachedSource(options = {}) {
     const run = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim();
     if (run("rev-parse", "HEAD") !== info.commit || run("status", "--porcelain", "--untracked-files=all", "--ignored")) return null;
     if (discoverSkills(root).length === 0) return null;
-    return { root, tag: info.tag, commit: info.commit };
+    return { root, tag: normalizeTag(info.tag), commit: info.commit };
   } catch { return null; }
 }
 
@@ -72,6 +95,24 @@ export async function acquireCachedSource(options = {}) {
   });
 }
 
+/**
+ * 只读远端引用，不 clone/fetch，也不写缓存；用于启动时检查最新正式 Tag。
+ */
+export async function remotePublicTag(options = {}) {
+  const { repo } = optionsWithDefaults(options);
+  try {
+    const output = await git(["ls-remote", "--tags", "--refs", repo], undefined, 8000);
+    const tags = output.split("\n")
+      .map(line => line.split(/\s+/)[1]?.replace(/^refs\/tags\//, ""))
+      .filter(Boolean);
+    const tag = stableTags(tags.join("\n"))[0];
+    if (!tag) throw new Error("技能与插件源没有正式版本 Tag");
+    return normalizeTag(tag);
+  } catch (error) {
+    throw sourceError(error);
+  }
+}
+
 export async function refreshPublicSource(options = {}) {
   const resolved = optionsWithDefaults(options);
   return withCacheLock(resolved.cacheDir, async () => {
@@ -79,6 +120,8 @@ export async function refreshPublicSource(options = {}) {
     try {
       const source = await refreshUnlocked(resolved);
       return leaseSource(resolved.cacheDir, source);
+    } catch (error) {
+      throw sourceError(error);
     } finally { cleanupCache(resolved.cacheDir); }
   });
 }
@@ -94,13 +137,14 @@ async function refreshUnlocked(options) {
       publishDirectory(temp, mirror);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   } else {
-    if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("公共技能缓存来源不匹配");
+    if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
     await fetchTags(mirror);
   }
-  if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("公共技能缓存来源不匹配");
-  const tag = stableTags(await git(["tag", "--list"], mirror))[0];
-  if (!tag) throw new Error("公共技能仓库没有正式版本 Tag");
-  const commit = await git(["rev-parse", `refs/tags/${tag}^{commit}`], mirror);
+  if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
+  const tagRef = stableTags(await git(["tag", "--list"], mirror))[0];
+  if (!tagRef) throw new Error("技能与插件源没有正式版本 Tag");
+  const tag = normalizeTag(tagRef);
+  const commit = await git(["rev-parse", `refs/tags/${tagRef}^{commit}`], mirror);
   const snapshots = join(resolve(cacheDir), "snapshots");
   mkdirSync(snapshots, { recursive: true });
   const root = join(snapshots, commit);
@@ -109,14 +153,14 @@ async function refreshUnlocked(options) {
     try {
       await git(["clone", "--no-checkout", "--no-hardlinks", "--", resolve(mirror), temp]);
       await git(["checkout", "--detach", commit], temp);
-      if (discoverSkills(temp).length === 0) throw new Error("正式版本没有可安装的公共技能");
+      if (discoverSkills(temp).length === 0) throw new Error("正式版本没有可安装的技能");
       publishDirectory(temp, root);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   }
   if (await git(["rev-parse", "HEAD"], root) !== commit || await git(["status", "--porcelain", "--untracked-files=all", "--ignored"], root)) {
-    throw new Error("公共技能快照已被修改，请保留本地改动并移走该快照后重试");
+    throw new Error("技能快照已被修改，请保留本地改动并移走该快照后重试");
   }
-  if (discoverSkills(root).length === 0) throw new Error("正式版本没有可安装的公共技能");
+  if (discoverSkills(root).length === 0) throw new Error("正式版本没有可安装的技能");
   const pointer = join(cacheDir, `current-${randomUUID()}.json`);
   try {
     writeFileSync(pointer, JSON.stringify({ repo, tag, commit }) + "\n");

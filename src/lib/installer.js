@@ -70,7 +70,7 @@ function isInstalledByUs(destPath, isDirBased) {
  */
 export function installSkillToTool(skill, tool) {
   const target = skill.installTargets?.find(tgt => tgt.toolId === tool.id && tgt.installMode === "dir");
-  if (!target) return { success: false, message: `Skill does not support ${tool.name}` };
+  if (!target) return { success: false, message: `该工具不支持此技能：${tool.name}` };
   if (!skill.sourceDir) return { success: false, message: `找不到 ${skill.id} 的技能源。` };
 
   const destPath = target.destPath();
@@ -78,14 +78,14 @@ export function installSkillToTool(skill, tool) {
   let installed = false;
   try {
     if (lstatSync(destPath, { throwIfNoEntry: false }) && !isInstalledByUs(destPath, true)) {
-      return { success: false, skipped: true, message: `目标已存在且非本工具安装，已跳过: ${destPath}` };
+      return { success: false, skipped: true, message: `目标已存在且非本工具安装，已跳过：${destPath}` };
     }
     const legacy = legacyPath && lstatSync(legacyPath, { throwIfNoEntry: false });
     if (legacy && !isInstalledByUs(legacyPath, false)) {
-      return { success: false, skipped: true, message: `存在非本工具安装的同名旧命令，已跳过: ${legacyPath}` };
+      return { success: false, skipped: true, message: `存在非本工具安装的同名旧命令，已跳过：${legacyPath}` };
     }
     const srcSkillFile = join(skill.sourceDir, "SKILL.md");
-    if (!lstatSync(srcSkillFile).isFile()) throw new Error("SKILL.md must be a regular file");
+    if (!lstatSync(srcSkillFile).isFile()) throw new Error("SKILL.md 不是普通文件");
     const managedContent = withManagedBy(readFileSync(srcSkillFile, "utf8"));
     copyDir(skill.sourceDir, destPath, managedContent);
     installed = true;
@@ -95,16 +95,16 @@ export function installSkillToTool(skill, tool) {
       if (current) {
         if (current.ino !== legacy.ino || current.dev !== legacy.dev || current.mtimeMs !== legacy.mtimeMs
           || !isInstalledByUs(legacyPath, false)) {
-          return { success: false, skipped: true, message: `Skill 已安装，旧命令在安装期间发生变化，已保留: ${legacyPath}` };
+          return { success: false, skipped: true, message: `技能已安装，旧命令在安装期间发生变化，已保留：${legacyPath}` };
         }
         try { unlinkSync(legacyPath); }
         catch (error) { if (error.code !== "ENOENT") throw error; }
       }
     }
-    return { success: true, message: `Installed to ${destPath}` };
+    return { success: true, message: `已安装到 ${destPath}` };
   } catch (error) {
-    const message = installed ? `Skill 已安装到 ${destPath}，未完成旧命令清理` : "安装失败";
-    return { success: false, message: `${message}: ${error.message}` };
+    const message = installed ? `技能已安装到 ${destPath}，未完成旧命令清理` : "安装失败";
+    return { success: false, message: `${message}：${error.message}` };
   }
 }
 
@@ -114,7 +114,7 @@ export function installSkillToTool(skill, tool) {
 export function uninstallSkillFromTool(skill, tool) {
   const target = skill.installTargets?.find(tgt => tgt.toolId === tool.id);
   if (!target) {
-    return { success: false, message: `Skill does not support ${tool.name}` };
+    return { success: false, message: `该工具不支持此技能：${tool.name}` };
   }
 
   let destPath;
@@ -129,22 +129,22 @@ export function uninstallSkillFromTool(skill, tool) {
     if (existsSync(destPath)) {
       return { success: false, message: `目标路径 ${destPath} 存在但非本工具安装，已跳过删除` };
     }
-    return { success: false, message: "Not installed" };
+    return { success: false, message: "未安装" };
   }
 
   if (isDirBased) {
     try {
       rmSync(destPath, { recursive: true, force: true });
     } catch (e) {
-      return { success: false, message: `卸载失败: ${e.message}` };
+      return { success: false, message: `卸载失败：${e.message}` };
     }
-    return { success: true, message: `Uninstalled from ${destPath}` };
+    return { success: true, message: `已从 ${destPath} 卸载` };
   } else {
     try {
       unlinkSync(destPath);
     } catch (e) {
-      return { success: false, message: `卸载失败: ${e.message}` };
+      return { success: false, message: `卸载失败：${e.message}` };
     }
-    return { success: true, message: `Uninstalled from ${destPath}` };
+    return { success: true, message: `已从 ${destPath} 卸载` };
   }
 }
