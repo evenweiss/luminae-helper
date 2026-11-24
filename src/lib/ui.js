@@ -886,9 +886,7 @@ async function runInteractivePluginUninstall() {
 
 // ── Main ──
 function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError }) {
-  const { rows, source } = inventory;
-  const skills = rows.filter(row => row.type === "技能").length;
-  const plugins = rows.filter(row => row.type === "插件").length;
+  const { source } = inventory;
   let line;
   let color = chalk.gray;
   if (remoteError) {
@@ -909,10 +907,7 @@ function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError 
     console.log(color(TERM_GUTTER + line) + "\n");
     return;
   }
-  const parts = [];
-  if (skills) parts.push(`技能 ${skills}`);
-  if (plugins) parts.push(`插件 ${plugins}`);
-  console.log(color(TERM_GUTTER + `${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`) + "\n");
+  console.log(color(TERM_GUTTER + line) + "\n");
 }
 
 async function loadStartupStatus() {
