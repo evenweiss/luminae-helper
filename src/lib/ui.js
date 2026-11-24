@@ -891,7 +891,7 @@ export async function runInteractive() {
       await afterPromptFlush();
       printBanner();
       printSectionTitle("━━━ 已安装内容 ━━━");
-      printInstalledContent(inventoryCache ??= collectInstalled());
+      printInstalledContent(inventoryCache);
       await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
       continue;
     }
@@ -908,7 +908,7 @@ export async function runInteractive() {
       result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true);
     }
 
-    inventoryCache = null;
+    inventoryCache = collectInstalled();
     if (result === "exit" || result === "abort") {
       exit = true;
     }

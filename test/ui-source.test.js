@@ -41,13 +41,24 @@ it("reuses the startup inventory when entering the installed view", async () => 
   expect(inventory.collectInstalled).toHaveBeenCalledTimes(1);
 });
 
-it("rescans installed content after an install", async () => {
+it("rescans after an install, then reuses the result for the installed view", async () => {
   const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
+  await runInteractive();
+  expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
+});
+
+it("rescans installed content even when the install fails", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
+  plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
+  plugins.installPlugin.mockRejectedValue(new Error("boom"));
+  prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
 });
