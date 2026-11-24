@@ -1,6 +1,6 @@
 {
   "name": "luminae-helper",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Install AI agent skills to coding tools",
   "type": "module",
   "bin": {
