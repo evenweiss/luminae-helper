@@ -149,7 +149,7 @@ describe("installer.js", () => {
 
       const result = uninstallSkillFromTool(skill, tool);
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Not installed");
+      expect(result.message).toContain("未安装");
       if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
     });
   });

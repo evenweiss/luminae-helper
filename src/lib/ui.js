@@ -131,7 +131,7 @@ function printTable(title, headers, data) {
 
 function printResultTable(title, rows) {
   const withReason = rows.some(row => row.reason);
-  const headers = withReason ? ["工具", "内容", "状态", "安装方式", "说明"] : ["工具", "内容", "状态", "安装方式"];
+  const headers = withReason ? ["工具", "内容", "状态", "类型", "说明"] : ["工具", "内容", "状态", "类型"];
   printTable(title, headers,
     rows.map(row => withReason
       ? [row.toolName, row.skillName, row.status, row.mode, row.reason || ""]
@@ -396,7 +396,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.yellow("不支持"),
-            mode: "不适用",
+            mode: "—",
           });
           allSuccess = false;
           permanentFailedKeys.add(key);
@@ -421,7 +421,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.yellow("未卸载"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // "未安装" 不可重试，"非本工具安装" 也不可重试
@@ -444,7 +445,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.yellow("已跳过"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // 目标被非本工具内容占用，重试也不会变
@@ -455,7 +457,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.red("失败"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // 安装失败可能是临时 I/O 问题，可重试
@@ -595,7 +598,7 @@ async function runFlow(isUninstall, session) {
           } else if (retrySuccess && accumulatedPermanent.size > 0) {
             // 重试成功但仍有不可重试的失败项（如"不支持"）
             printResultTable("安装结果", accumulatedResultRows);
-            console.log(chalk.yellow(TERM_GUTTER + `⚠ ${accumulatedPermanent.size} 项不可重试的操作已跳过（不支持或非本工具安装）\n`));
+            console.log(chalk.yellow(TERM_GUTTER + `⚠ ${accumulatedPermanent.size} 项不可重试，已跳过，请检查说明\n`));
             await input(
               {
                 message: "按任意键返回主菜单...",
@@ -608,7 +611,7 @@ async function runFlow(isUninstall, session) {
         } else if (permanentFailedKeys.size > 0 && failedKeys.size === 0) {
           // 全部是 permanent 失败，无重试价值
           printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
-          console.log(chalk.yellow(TERM_GUTTER + `⚠ ${permanentFailedKeys.size} 项操作不可执行（不支持或非本工具安装），已跳过\n`));
+          console.log(chalk.yellow(TERM_GUTTER + `⚠ ${permanentFailedKeys.size} 项操作未完成，已跳过，请检查说明\n`));
           await input(
             {
               message: "按任意键返回主菜单...",
@@ -822,71 +825,90 @@ async function runInteractivePluginUninstall() {
   }
   const theme = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 
+  let stage = 1;
   let hostIds = [];
-  while (!hostIds.length) {
-    const answer = await runCheckbox({
-      message: "选择工具:",
-      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
-      loop: false,
-      theme,
-    });
-    const result = parseCheckboxResult(answer);
-    if (result === "back") return "back";
-    if (result === "exit") return "exit";
-    if (!result.length) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
-      await new Promise(r => setTimeout(r, 1200));
+  let selected = new Map();
+  let total = 0;
+  while (true) {
+    if (stage === 1) {
+      let nextHostIds = [];
+      while (!nextHostIds.length) {
+        const answer = await runCheckbox({
+          message: "选择工具:",
+          choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
+          loop: false,
+          theme,
+        });
+        const result = parseCheckboxResult(answer);
+        if (result === "back") return "back";
+        if (result === "exit") return "exit";
+        if (!result.length) {
+          console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
+          await new Promise(r => setTimeout(r, 1200));
+          continue;
+        }
+        nextHostIds = result;
+      }
+      hostIds = nextHostIds;
+      selected = new Map();
+      stage = 2;
       continue;
     }
-    hostIds = result;
-  }
 
-  const selected = new Map();
-  for (const hostId of hostIds) {
-    const host = hosts.find(tool => tool.id === hostId);
-    let names = [];
-    while (!names.length) {
-      const answer = await runCheckbox({
-        message: `选择 ${host.name} 的插件:`,
-        choices: withNavChoices(host.plugins.map(plugin => ({
-          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
-          value: plugin.name,
-          checked: false,
-        })), "↩ 返回主菜单", "✕ 退出", "下一步"),
-        loop: false,
-        theme,
-      });
-      const result = parseCheckboxResult(answer);
-      if (result === "back") return "back";
-      if (result === "exit") return "exit";
-      if (!result.length) {
-        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
-        await new Promise(r => setTimeout(r, 1200));
-        continue;
+    if (stage === 2) {
+      let backed = false;
+      for (const hostId of hostIds) {
+        const host = hosts.find(tool => tool.id === hostId);
+        let names = null;
+        while (names === null || names.length === 0) {
+          const answer = await runCheckbox({
+            message: `选择 ${host.name} 的插件:`,
+            choices: withNavChoices(host.plugins.map(plugin => ({
+              name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+              value: plugin.name,
+              checked: selected.get(hostId)?.includes(plugin.name) ?? false,
+            })), "↩ 上一步", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") { stage = 1; backed = true; break; }
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          names = result;
+        }
+        if (backed) break;
+        selected.set(hostId, names);
       }
-      names = result;
+      if (backed) continue;
+      total = [...selected.values()].reduce((sum, names) => sum + names.length, 0);
+      stage = 3;
+      continue;
     }
-    selected.set(hostId, names);
-  }
 
-  const total = [...selected.values()].reduce((sum, names) => sum + names.length, 0);
-  await afterPromptFlush();
-  printBanner();
-  printSectionTitle("━━━ 卸载预览 ━━━");
-  printTable("待卸载内容", ["工具", "插件"], [...selected].flatMap(([hostId, names]) => {
-    const host = hosts.find(tool => tool.id === hostId);
-    return names.map(name => [host.name, name]);
-  }));
-  const confirmation = await pick({
-    message: `确认卸载这 ${total} 个插件？`,
-    choices: [
-      { name: "↩ 返回主菜单", value: "back" },
-      { name: "✓ 确认卸载", value: "confirm" },
-      { name: "✕ 退出", value: "exit" },
-    ],
-  });
-  if (confirmation === "back") return "back";
-  if (confirmation !== "confirm") return "exit";
+    await afterPromptFlush();
+    printBanner();
+    printSectionTitle("━━━ 卸载预览 ━━━");
+    printTable("待卸载内容", ["工具", "插件"], [...selected].flatMap(([hostId, names]) => {
+      const host = hosts.find(tool => tool.id === hostId);
+      return names.map(name => [host.name, name]);
+    }));
+    const confirmation = await pick({
+      message: `确认卸载这 ${total} 个插件？`,
+      choices: [
+        { name: "✓ 确认卸载", value: "confirm" },
+        { name: "↩ 上一步", value: "back" },
+        { name: "✕ 退出", value: "exit" },
+      ],
+    });
+    if (confirmation === "back") { stage = 2; continue; }
+    if (confirmation !== "confirm") return "exit";
+    break;
+  }
 
   await afterPromptFlush();
   printBanner();

@@ -244,8 +244,30 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
   const output = console.log.mock.calls.flat().join("\n");
   expect(output).toContain("待卸载内容");
+  expect(output).toContain("说明");
+  expect(output).not.toContain("安装方式");
   expect(output).not.toContain("正在卸载");
   expect(output).toContain("boom");
+});
+
+it("steps back through plugin uninstall hosts, plugins and confirmation", async () => {
+  plugins.listInstalledPlugins.mockImplementation(host => (
+    host === "codex" ? [{ name: "a" }] : [{ name: "c" }]
+  ));
+  plugins.uninstallPlugin.mockResolvedValue({ pluginId: "x" });
+  prompts.checkbox.mockResolvedValueOnce(["codex", "claude-code"])
+    .mockResolvedValueOnce(["a"]).mockResolvedValueOnce(["__back__"])
+    .mockResolvedValueOnce(["codex", "claude-code"]).mockResolvedValueOnce(["a"]).mockResolvedValueOnce(["c"])
+    .mockResolvedValueOnce(["a"]).mockResolvedValueOnce(["c"]);
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("plugin")
+    .mockResolvedValueOnce("back").mockResolvedValueOnce("confirm");
+  await runInteractive();
+  expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["c", "claude-code"]]);
+  const pluginStep = prompts.checkbox.mock.calls[2][0];
+  const confirmStep = prompts.select.mock.calls[2][0];
+  expect(pluginStep.choices.find(choice => choice.value === "__back__").name).toBe("↩ 上一步");
+  expect(confirmStep.choices[0].value).toBe("confirm");
+  expect(confirmStep.choices.find(choice => choice.value === "back").name).toBe("↩ 上一步");
 });
 
 it("installs plugins immediately after choosing plugins and hosts", async () => {
