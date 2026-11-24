@@ -50,6 +50,14 @@ it("lists the selected tool and skill in the install preview", async () => {
   expect(output).toContain("runtime");
 });
 
+it("aligns select choice text with the prompt title", async () => {
+  prompts.select.mockResolvedValueOnce("exit");
+  await runInteractive();
+  const menu = prompts.select.mock.calls[0][0];
+  expect(menu.choices.slice(0, 4).every(choice => choice.name.startsWith(" "))).toBe(true);
+  expect(menu.theme.prefix).toContain("▌");
+});
+
 it("reuses the startup inventory when entering the installed view", async () => {
   prompts.select.mockResolvedValueOnce("list").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
   await runInteractive();

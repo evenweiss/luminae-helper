@@ -15,6 +15,7 @@ import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugi
  */
 export const TERM_GUTTER = "  ";
 const PROMPT_PREFIX = chalk.cyan.bold(" ▌");
+const PROMPT_THEME = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 
 /**
  * 传给所有 @inquirer prompt 的 context。
@@ -165,7 +166,12 @@ function withNavChoices(items, backLabel, exitLabel = "✕ 退出", actionLabel 
 
 /** 单选菜单统一关闭循环：到最后一项再按↓不再跳回第一项。 */
 function pick(config) {
-  return Select({ loop: false, ...config }, inquirerContext);
+  // select 的选中/未选中行都以「光标 + 空格」开头，给选项补一个前导空格，
+  // 让文字与标题正文同列（多选则天然差一个复选框字符）。
+  const choices = config.choices.map((choice) =>
+    choice instanceof Separator ? choice : { ...choice, name: " " + choice.name }
+  );
+  return Select({ loop: false, theme: PROMPT_THEME, ...config, choices }, inquirerContext);
 }
 
 /**
@@ -176,7 +182,7 @@ function pick(config) {
  * @returns {Promise<string[]>}
  */
 async function runCheckbox(config) {
-  return checkboxWithActionRows(config, inquirerContext).catch((err) => {
+  return checkboxWithActionRows({ theme: PROMPT_THEME, ...config }, inquirerContext).catch((err) => {
     if (err?.name === "ExitPromptError") return ["__exit__"];
     return ["__exit__"];
   });
@@ -975,10 +981,10 @@ export async function runInteractive() {
         {
           message: "选择操作:",
           choices: [
-            { name: padChoice(" 安装 / 更新", 20), value: "install" },
-            { name: padChoice(" 卸载", 20), value: "uninstall" },
-            { name: padChoice(" 已安装", 20), value: "list" },
-            { name: padChoice(" 退出", 20), value: "exit" },
+            { name: padChoice("安装 / 更新", 20), value: "install" },
+            { name: padChoice("卸载", 20), value: "uninstall" },
+            { name: padChoice("已安装", 20), value: "list" },
+            { name: padChoice("退出", 20), value: "exit" },
           ],
           theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
         }
