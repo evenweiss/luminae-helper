@@ -794,7 +794,7 @@ export async function runInteractive() {
         choices: [
           { name: padChoice(" 安装 / 更新", 20), value: "install" },
           { name: padChoice(" 卸载", 20), value: "uninstall" },
-          { name: padChoice(" 查看已安装", 20), value: "list" },
+          { name: padChoice(" 已安装", 20), value: "list" },
           { name: padChoice(" 退出", 20), value: "exit" },
         ],
         theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },

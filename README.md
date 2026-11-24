@@ -86,7 +86,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 ### 查看已安装
 
-主菜单选「查看已安装」，或直接运行 `luminae-helper list`。按宿主列出 Helper 管理的技能与插件，插件带版本；技能源码没有版本字段，版本列显示 `—`。末尾显示最近一次技能来源快照。
+主菜单选「已安装」，或直接运行 `luminae-helper list`。按宿主列出 Helper 管理的技能与插件，插件带版本；技能源码没有版本字段，版本列显示 `—`。末尾显示最近一次技能来源快照。
 
 ### 其他命令
 
