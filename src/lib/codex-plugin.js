@@ -497,7 +497,7 @@ export async function runPluginCommand(args) {
   const snapshot = await refreshPublicSource();
   try {
     printPluginResult(await installPlugin(name, undefined, host, snapshot.root), host);
-    console.log(`  插件来源：技能与插件源 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`);
+    console.log(`  插件来源：技能与插件源 ${snapshot.tag}`);
   } finally {
     await snapshot.release();
   }

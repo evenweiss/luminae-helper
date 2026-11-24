@@ -482,8 +482,8 @@ async function runFlow(isUninstall, session) {
       return "back";
     }
     publicSourceLabel = session.usedFallback
-      ? `技能旧缓存 ${source.tag} · ${source.commit.slice(0, 7)}（未确认最新）`
-      : `技能 ${source.tag} · ${source.commit.slice(0, 7)}`;
+      ? `技能旧缓存 ${source.tag}（未确认最新）`
+      : `技能 ${source.tag}`;
     setSkillsSource(source.root);
   }
   if (SKILLS.length === 0) {
@@ -625,7 +625,7 @@ async function runInteractivePluginInstall(session) {
       return "back";
     }
     if (session.usedFallback) {
-      console.log(chalk.yellow(TERM_GUTTER + `⚠ 使用旧缓存 ${source.tag} · ${source.commit.slice(0, 7)}（未确认最新）`));
+      console.log(chalk.yellow(TERM_GUTTER + `⚠ 使用旧缓存 ${source.tag}（未确认最新）`));
     }
     const catalog = listAllManagedPlugins(source.root);
     if (!catalog.length) throw new Error("当前没有可安装的插件。");
@@ -758,7 +758,7 @@ async function runInteractivePluginInstall(session) {
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
     }
-    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能与插件源 ${source.tag}（${source.commit.slice(0, 7)}）${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能与插件源 ${source.tag}${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
     else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
@@ -940,7 +940,7 @@ async function useCachedSource(session, failure) {
     return null;
   }
   const choice = await pick({
-    message: `是否使用本地缓存 ${cached.tag} · ${cached.commit.slice(0, 7)} 继续安装？`,
+    message: `是否使用本地缓存 ${cached.tag} 继续安装？`,
     choices: [
       { name: "返回，不安装", value: "back" },
       { name: "使用此缓存（未确认是最新版本）", value: "cache" },

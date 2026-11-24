@@ -36,7 +36,7 @@ async function install(names, all, tool) {
         console.log(`  ❌ ${skill.id}: ${result.message}`);
         continue;
       }
-      console.log(`  已安装 ${skill.id} 到 ${tool.name}（技能 ${source.tag} · ${source.commit}）`);
+      console.log(`  已安装 ${skill.id} 到 ${tool.name}（技能 ${source.tag}）`);
       console.log(`  ${result.message}`);
     }
     if (failed.length) throw new Error(`${failed.length} 项安装失败：${failed.join("、")}`);
