@@ -831,6 +831,7 @@ function printStartupStatus({ inventory, remoteTag, remoteError }) {
 }
 
 async function loadStartupStatus() {
+  console.log(chalk.gray(TERM_GUTTER + "正在读取已安装内容…"));
   let inventory;
   let inventoryError = null;
   try {
