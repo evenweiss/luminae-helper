@@ -80,7 +80,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 技能：只删除带有 `managed-by: luminae-helper` 标识的文件，不会误删用户手动创建或 AI 工具自带的同名文件。
 
-插件：只列出 Helper 管理的插件——Codex/Claude Code 查宿主配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
+插件：可多选宿主、再逐个宿主多选插件。列表只列出 Helper 管理的插件——Codex/Claude Code 查宿主配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
 
 安装时，目标宿主已有非本工具管理的同名技能或旧命令文件会跳过并说明冲突。更新受管旧命令时，成功安装技能后才移除旧文件。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
 

@@ -744,21 +744,59 @@ async function runInteractivePluginUninstall() {
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
-  const hostId = await pick({
-    message: "选择插件宿主:",
-    choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
-  });
-  if (hostId === "__back__") return "back";
-  if (hostId === "__exit__") return "exit";
-  const host = hosts.find(tool => tool.id === hostId);
-  const name = await pick({
-    message: `选择 ${host.name} 插件:`,
-    choices: withNavChoices(host.plugins.map(plugin => ({ name: plugin.name, value: plugin.name })), "↩ 返回主菜单"),
-  });
-  if (name === "__back__") return "back";
-  if (name === "__exit__") return "exit";
+  const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
+
+  let hostIds = [];
+  while (!hostIds.length) {
+    const answer = await runCheckbox({
+      message: "选择插件宿主:",
+      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+      loop: false,
+      theme,
+    });
+    const result = parseCheckboxResult(answer);
+    if (result === "back") return "back";
+    if (result === "exit") return "exit";
+    if (!result.length) {
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件宿主"));
+      await new Promise(r => setTimeout(r, 1200));
+      continue;
+    }
+    hostIds = result;
+  }
+
+  const selected = new Map();
+  for (const hostId of hostIds) {
+    const host = hosts.find(tool => tool.id === hostId);
+    let names = [];
+    while (!names.length) {
+      const answer = await runCheckbox({
+        message: `选择 ${host.name} 插件:`,
+        choices: withNavChoices(host.plugins.map(plugin => ({
+          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+          value: plugin.name,
+          checked: false,
+        })), "↩ 返回主菜单"),
+        loop: false,
+        theme,
+      });
+      const result = parseCheckboxResult(answer);
+      if (result === "back") return "back";
+      if (result === "exit") return "exit";
+      if (!result.length) {
+        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+        await new Promise(r => setTimeout(r, 1200));
+        continue;
+      }
+      names = result;
+    }
+    selected.set(hostId, names);
+  }
+
+  const total = [...selected.values()].reduce((sum, names) => sum + names.length, 0);
+  const hostNames = hostIds.map(id => hosts.find(tool => tool.id === id).name).join("、");
   const confirmation = await pick({
-    message: `卸载 ${name}（${host.name}）？`,
+    message: `卸载 ${total} 个插件（${hostNames}）？`,
     choices: [
       { name: "返回", value: "back" },
       { name: "确认卸载", value: "confirm" },
@@ -767,16 +805,30 @@ async function runInteractivePluginUninstall() {
   });
   if (confirmation === "back") return "back";
   if (confirmation !== "confirm") return "exit";
+
   await afterPromptFlush();
   printBanner();
   printSectionTitle("━━━ 卸载结果 ━━━");
-  try {
-    await uninstallPlugin(name, hostId);
-    printResultTable("卸载结果", [{ toolName: host.name, skillName: name, status: chalk.green("已卸载"), mode: "插件" }]);
-  } catch (error) {
-    printResultTable("卸载结果", [{ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件" }]);
-    console.log(chalk.red(TERM_GUTTER + error.message));
+  const rows = [];
+  let ok = 0;
+  let failed = 0;
+  for (const [hostId, names] of selected) {
+    const host = hosts.find(tool => tool.id === hostId);
+    for (const name of names) {
+      try {
+        await uninstallPlugin(name, hostId);
+        ok += 1;
+        rows.push({ toolName: host.name, skillName: name, status: chalk.green("已卸载"), mode: "插件" });
+      } catch (error) {
+        failed += 1;
+        rows.push({ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件" });
+        console.log(chalk.red(TERM_GUTTER + error.message));
+      }
+    }
   }
+  printResultTable("卸载结果", rows);
+  if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项卸载失败，请手动检查。\n`));
+  else console.log(chalk.green(TERM_GUTTER + `✅ 已卸载 ${ok} 项\n`));
   await input({ message: "按任意键退出..." }, inquirerContext).catch(() => {});
   return "exit";
 }

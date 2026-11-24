@@ -81,10 +81,22 @@ it("releases a cache lease when the user declines it", async () => {
 it("uninstalls a managed plugin after confirming the host", async () => {
   plugins.listInstalledPlugins.mockImplementation(host => host === "codex" ? [{ name: "workflow" }] : []);
   plugins.uninstallPlugin.mockResolvedValue({ pluginId: "workflow" });
-  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("plugin")
-    .mockResolvedValueOnce("codex").mockResolvedValueOnce("workflow").mockResolvedValueOnce("confirm");
+  prompts.checkbox.mockResolvedValueOnce(["codex"]).mockResolvedValueOnce(["workflow"]);
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm");
   await runInteractive();
   expect(plugins.uninstallPlugin).toHaveBeenCalledExactlyOnceWith("workflow", "codex");
+});
+
+it("uninstalls several plugins across hosts in one pass", async () => {
+  plugins.listInstalledPlugins.mockImplementation(host => (
+    host === "codex" ? [{ name: "a" }, { name: "b" }] : [{ name: "c" }]
+  ));
+  plugins.uninstallPlugin.mockResolvedValue({ pluginId: "x" });
+  prompts.checkbox.mockResolvedValueOnce(["codex", "claude-code"])
+    .mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["c"]);
+  prompts.select.mockResolvedValueOnce("uninstall").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm");
+  await runInteractive();
+  expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
 });
 
 it.each([true, false])("uses the shared plugin installer only after interactive confirmation=%s", async (confirm) => {
