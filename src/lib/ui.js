@@ -270,12 +270,20 @@ function asIdArray(v) {
 }
 
 // ── Step 3: Preview + Confirm（仅标题 + 确认菜单；不再展示 Skill/工具明细）──
-async function stepPreviewConfirm(isUninstall) {
+async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
   await afterPromptFlush();
   printBanner();
   const actionLabel = isUninstall ? "卸载" : "安装";
   printSectionTitle("━━━ " + actionLabel + "预览 ━━━");
-  // 第三步：标题下方不再打印 Skill/工具明细列表，由确认菜单直接操作
+  const rows = [];
+  for (const toolId of toolIds) {
+    const tool = TOOLS.find(t => t.id === toolId);
+    for (const skillId of skillIds) {
+      const skill = SKILLS.find(item => item.id === skillId);
+      if (tool && skill) rows.push([tool.name, skill.name]);
+    }
+  }
+  printTable(`待${actionLabel}内容`, ["工具", "技能"], rows);
 
   const ans = await pick(
     {
@@ -488,7 +496,7 @@ async function runFlow(isUninstall, session) {
       selectedToolIds = result;
       step = 3;
     } else if (step === 3) {
-      const result = await stepPreviewConfirm(isUninstall);
+      const result = await stepPreviewConfirm(isUninstall, selectedSkillIds, selectedToolIds);
       if (result === "back") { step = 2; continue; }
       if (result === "abort") return "abort";
       if (result === "exit") return "exit";
@@ -635,7 +643,7 @@ async function runInteractivePluginInstall(session) {
     while (!hostIds.length) {
       const answer = await runCheckbox({
         message: "选择工具:",
-        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "开始安装"),
+        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
         loop: false,
         theme,
       });
@@ -668,6 +676,27 @@ async function runInteractivePluginInstall(session) {
       return "back";
     }
 
+    await afterPromptFlush();
+    printBanner();
+    printSectionTitle("━━━ 安装预览 ━━━");
+    printTable("待安装内容", ["工具", "插件", "状态"], [
+      ...combos.map(item => [toolById.get(item.hostId).name, item.name, "待安装"]),
+      ...skipped.map(item => [toolById.get(item.hostId).name, item.name, "不支持"]),
+    ]);
+    const confirmation = await pick({
+      message: "确认安装？",
+      choices: [
+        { name: "✓ 确认安装", value: "confirm" },
+        { name: "↩ 返回主菜单", value: "back" },
+        { name: "✕ 退出", value: "exit" },
+      ],
+      theme,
+    });
+    if (confirmation === "back") return "back";
+    if (confirmation !== "confirm") return "exit";
+
+    await afterPromptFlush();
+    printBanner();
     printSectionTitle("━━━ 执行中 ━━━");
     const rows = [];
     let ok = 0;
@@ -770,13 +799,19 @@ async function runInteractivePluginUninstall() {
   }
 
   const total = [...selected.values()].reduce((sum, names) => sum + names.length, 0);
-  const hostNames = hostIds.map(id => hosts.find(tool => tool.id === id).name).join("、");
+  await afterPromptFlush();
+  printBanner();
+  printSectionTitle("━━━ 卸载预览 ━━━");
+  printTable("待卸载内容", ["工具", "插件"], [...selected].flatMap(([hostId, names]) => {
+    const host = hosts.find(tool => tool.id === hostId);
+    return names.map(name => [host.name, name]);
+  }));
   const confirmation = await pick({
-    message: `卸载 ${total} 个插件（${hostNames}）？`,
+    message: `确认卸载这 ${total} 个插件？`,
     choices: [
-      { name: "返回", value: "back" },
-      { name: "确认卸载", value: "confirm" },
-      { name: "退出", value: "exit" },
+      { name: "↩ 返回主菜单", value: "back" },
+      { name: "✓ 确认卸载", value: "confirm" },
+      { name: "✕ 退出", value: "exit" },
     ],
   });
   if (confirmation === "back") return "back";

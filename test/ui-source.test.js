@@ -38,6 +38,18 @@ it("loads runtime skills before offering the install list", async () => {
   expect(console.log.mock.calls.flat().join("\n")).toMatch(/已获取技能与插件 0\.3\.0/);
 });
 
+it("lists the selected tool and skill in the install preview", async () => {
+  const snapshot = { root, tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
+  prompts.checkbox.mockResolvedValueOnce(["runtime"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
+  await runInteractive();
+  const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toContain("待安装内容");
+  expect(output).toContain("Codex");
+  expect(output).toContain("runtime");
+});
+
 it("reuses the startup inventory when entering the installed view", async () => {
   prompts.select.mockResolvedValueOnce("list").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
   await runInteractive();
@@ -50,7 +62,7 @@ it("rescans after an install, then reuses the result for the installed view", as
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
 });
@@ -61,7 +73,7 @@ it("rescans installed content even when the install fails", async () => {
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockRejectedValue(new Error("boom"));
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
 });
@@ -120,7 +132,7 @@ it("uses the validated local snapshot when startup tags match", async () => {
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(source.refreshPublicSource).not.toHaveBeenCalled();
   expect(source.acquireCachedSource).toHaveBeenCalledTimes(1);
@@ -135,8 +147,8 @@ it("pulls at most once per session across install panels", async () => {
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"])
     .mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin")
-    .mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm")
+    .mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(source.refreshPublicSource).toHaveBeenCalledTimes(1);
   expect(plugins.installPlugin).toHaveBeenCalledTimes(2);
@@ -170,6 +182,7 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   await runInteractive();
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
   const output = console.log.mock.calls.flat().join("\n");
+  expect(output).toContain("待卸载内容");
   expect(output).toMatch(/正在卸载 2\/3：b/);
   expect(output).toContain("boom");
 });
@@ -180,7 +193,7 @@ it("installs plugins immediately after choosing plugins and hosts", async () => 
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
   prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(source.refreshPublicSource).toHaveBeenCalledTimes(1);
   expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("workflow", undefined, "codex", snapshot.root);
@@ -191,7 +204,7 @@ it("offers the aggregated plugin catalog before host selection", async () => {
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "ai-development-workflow", hosts: ["codex", "claude-code"] }]);
   prompts.checkbox.mockResolvedValueOnce(["ai-development-workflow"]).mockResolvedValueOnce(["codex"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   const selection = prompts.checkbox.mock.calls.find(([config]) => config.message === "选择插件:")[0];
   expect(selection.choices.filter(choice => choice.value && !choice.value.startsWith("__"))
@@ -208,7 +221,7 @@ it("installs a plugin in the selected compatible host", async () => {
   source.refreshPublicSource.mockResolvedValue(snapshot);
   plugins.listAllManagedPlugins.mockReturnValue([{ name: "ai-development-workflow", hosts: ["codex", "claude-code"] }]);
   prompts.checkbox.mockResolvedValueOnce(["ai-development-workflow"]).mockResolvedValueOnce(["claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "claude-code", snapshot.root);
 });
@@ -222,13 +235,14 @@ it("installs every selected plugin into every selected host", async () => {
   ]);
   plugins.installPlugin.mockImplementation((name, _source, host) => Promise.resolve({ pluginId: `${name}@luminae-helper`, version: `${host}-${name}` }));
   prompts.checkbox.mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["codex", "claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin.mock.calls).toEqual([
     ["a", undefined, "codex", snapshot.root], ["b", undefined, "codex", snapshot.root],
     ["a", undefined, "claude-code", snapshot.root], ["b", undefined, "claude-code", snapshot.root],
   ]);
   const resultTable = console.log.mock.calls.map(([line]) => String(line)).join("\n");
+  expect(resultTable).toContain("待安装内容");
   expect(resultTable).toContain("安装结果");
 });
 
@@ -241,7 +255,7 @@ it("installs only supported combinations and reports skipped ones with reasons",
   ]);
   plugins.installPlugin.mockResolvedValue({ pluginId: "x", version: "1.0.0" });
   prompts.checkbox.mockResolvedValueOnce(["a", "b"]).mockResolvedValueOnce(["codex", "claude-code"]);
-  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("confirm").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(plugins.installPlugin.mock.calls).toEqual([
     ["a", undefined, "codex", snapshot.root],

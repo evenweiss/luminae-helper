@@ -30,7 +30,7 @@ luminae-helper
 
 1. **选择技能** — 勾选后按回车，或选「下一步」
 2. **选择工具** — 勾选要安装到哪些 AI 工具（自动检测本机已安装的），按回车或选「下一步」进入预览
-3. **预览确认** — 确认后执行
+3. **预览确认** — 按工具列出每个技能，确认后执行
 4. **执行安装** — 复制文件到各工具目录，汇总结果
 
 也可以直接安装指定技能：
@@ -50,7 +50,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选工具：插件清单聚合五个支持插件的工具，选完工具后选「开始安装」。结果表列出成功、失败和不支持的组合，并写明失败原因或「该工具清单中没有此插件」。插件清单来自技能与插件源最新正式 Tag（与技能共用同一份快照），五个支持插件的工具都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个工具执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选工具：插件清单聚合五个支持插件的工具，选完工具后选「下一步」，在安装预览中确认「确认安装」。结果表列出成功、失败和不支持的组合，并写明失败原因或「该工具清单中没有此插件」。插件清单来自技能与插件源最新正式 Tag（与技能共用同一份快照），五个支持插件的工具都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个工具执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex
@@ -80,7 +80,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 技能：只删除带有 `managed-by: luminae-helper` 标识的文件，不会误删用户手动创建或 AI 工具自带的同名文件。
 
-插件：可多选工具、再逐个工具多选插件。列表只列出 Helper 管理的插件——Codex/Claude Code 查工具配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
+插件：可多选工具、再逐个工具多选插件，卸载预览会按工具列出每个插件。列表只列出 Helper 管理的插件——Codex/Claude Code 查工具配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
 
 安装时，目标工具已有非本工具管理的同名技能或旧命令文件会跳过并说明冲突。更新受管旧命令时，成功安装技能后才移除旧文件。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
 
