@@ -281,6 +281,7 @@ export default createPrompt((config, done) => {
   const helpLine = theme.style.keysHelpTip(keys);
   const lines = [
     [prefix, message].filter(Boolean).join(" "),
+    " ",
     page,
     " ",
     description ? theme.style.description(description) : "",
