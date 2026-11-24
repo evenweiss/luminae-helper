@@ -35,7 +35,7 @@ it("loads runtime skills before offering the install list", async () => {
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
   const selection = prompts.checkbox.mock.calls[0][0];
   expect(selection.choices.some(choice => choice.value === "__next__")).toBe(true);
-  expect(console.log.mock.calls.flat().join("\n")).toMatch(/已获取技能与插件 0\.3\.0/);
+  expect(console.log.mock.calls.flat().join("\n")).not.toMatch(/正在获取技能与插件|已获取技能与插件/);
 });
 
 it("lists the selected tool and skill in the install preview", async () => {

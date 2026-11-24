@@ -939,14 +939,22 @@ async function ensureSource(session) {
   if (session.remoteError?.startsWith("找不到 Git")) {
     return useCachedSource(session, session.remoteError);
   }
-  console.log(TERM_GUTTER + "正在获取技能与插件…");
+  // 进度只占一行，拉取结束立即擦掉；获取结果由下一屏的「技能 x.y.z」标题表达。
+  const canAnimate = Boolean(process.stdout.isTTY);
+  if (canAnimate) {
+    process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray("正在获取技能与插件…")}`);
+  }
+  const clearProgress = () => {
+    if (canAnimate) process.stdout.write("\r\x1b[2K");
+  };
   try {
     const source = await refreshPublicSource();
-    console.log(chalk.gray(TERM_GUTTER + `已获取技能与插件 ${source.tag} · ${source.commit.slice(0, 7)}`));
+    clearProgress();
     session.source = source;
     session.pullRequired = false;
     return source;
   } catch (error) {
+    clearProgress();
     return useCachedSource(session, error.message);
   }
 }
