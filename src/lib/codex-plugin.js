@@ -132,10 +132,10 @@ function readMarketplace(directory, host, catalog) {
   return { directory, name: manifest.name, plugins };
 }
 
-// 受管插件取自技能仓库最新正式 Tag 的运行时快照（与技能共用同一份缓存）。
+// 受管插件取自技能与插件源最新正式 Tag 的运行时快照（与技能共用同一份缓存）。
 function snapshotSource(host, root) {
   if (typeof root !== "string" || !existsSync(root)) {
-    throw new Error("缺少插件来源快照，请重新运行安装以获取技能仓库的最新版本。");
+    throw new Error("缺少插件来源快照，请重新运行安装以获取技能与插件的最新版本。");
   }
   const directory = realpathSync(root);
   const config = hostConfig(host);
@@ -497,7 +497,7 @@ export async function runPluginCommand(args) {
   const snapshot = await refreshPublicSource();
   try {
     printPluginResult(await installPlugin(name, undefined, host, snapshot.root), host);
-    console.log(`  插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`);
+    console.log(`  插件来源：技能与插件源 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`);
   } finally {
     await snapshot.release();
   }

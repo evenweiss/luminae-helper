@@ -33,7 +33,7 @@ it("loads runtime skills before offering the install list", async () => {
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
-  expect(console.log.mock.calls.flat().join("\n")).toMatch(/已拉取技能仓库 0\.3\.0/);
+  expect(console.log.mock.calls.flat().join("\n")).toMatch(/已获取技能与插件 0\.3\.0/);
 });
 
 it("reuses the startup inventory when entering the installed view", async () => {
@@ -69,7 +69,7 @@ it("shows a startup check failure without blocking the menu", async () => {
   prompts.select.mockResolvedValueOnce("exit");
   await runInteractive();
   const output = console.log.mock.calls.map(([line]) => String(line)).join("\n");
-  expect(output).toContain("无法检查技能仓库最新版本：网络不可用");
+  expect(output).toContain("无法检查技能与插件更新：网络不可用");
 });
 
 it("starts the uninstall skill list with nothing selected", async () => {

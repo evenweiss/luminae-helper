@@ -38,11 +38,11 @@ function sourceError(error) {
   if (error?.message?.startsWith("找不到 Git")) return error;
   const text = String(error?.stderr || error?.stdout || error?.message || "");
   if (error?.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error?.signal) || /timed out/i.test(text)) {
-    return new Error("无法获取技能仓库：网络或代理不可用（请求超时）。");
+    return new Error("无法获取技能与插件源：网络或代理不可用（请求超时）。");
   }
   if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
   const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
-  return new Error(`无法获取技能仓库：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
+  return new Error(`无法获取技能与插件源：网络或代理不可用${reason ? `（${reason}）` : ""}。`);
 }
 function publishDirectory(temp, destination) {
   try { renameSync(temp, destination); }
@@ -106,7 +106,7 @@ export async function remotePublicTag(options = {}) {
       .map(line => line.split(/\s+/)[1]?.replace(/^refs\/tags\//, ""))
       .filter(Boolean);
     const tag = stableTags(tags.join("\n"))[0];
-    if (!tag) throw new Error("技能仓库没有正式版本 Tag");
+    if (!tag) throw new Error("技能与插件源没有正式版本 Tag");
     return normalizeTag(tag);
   } catch (error) {
     throw sourceError(error);
@@ -142,7 +142,7 @@ async function refreshUnlocked(options) {
   }
   if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
   const tagRef = stableTags(await git(["tag", "--list"], mirror))[0];
-  if (!tagRef) throw new Error("技能仓库没有正式版本 Tag");
+  if (!tagRef) throw new Error("技能与插件源没有正式版本 Tag");
   const tag = normalizeTag(tagRef);
   const commit = await git(["rev-parse", `refs/tags/${tagRef}^{commit}`], mirror);
   const snapshots = join(resolve(cacheDir), "snapshots");

@@ -605,7 +605,7 @@ async function runInteractivePluginInstall(session) {
       console.log(chalk.yellow(TERM_GUTTER + `⚠ 使用旧缓存 ${source.tag} · ${source.commit.slice(0, 7)}（未确认最新）`));
     }
     const catalog = listAllManagedPlugins(source.root);
-    if (!catalog.length) throw new Error("技能仓库当前没有可安装的插件。");
+    if (!catalog.length) throw new Error("当前没有可安装的插件。");
 
     let selectedNames = [];
     while (!selectedNames.length) {
@@ -694,7 +694,7 @@ async function runInteractivePluginInstall(session) {
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
     }
-    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${source.tag}（${source.commit.slice(0, 7)}）${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能与插件源 ${source.tag}（${source.commit.slice(0, 7)}）${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
     else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
@@ -817,12 +817,12 @@ function printStartupStatus({ inventory, remoteTag, remoteError }) {
   if (source) console.log(chalk.gray(TERM_GUTTER + `技能快照 ${source.tag} · ${source.commit.slice(0, 7)}`));
   else console.log(chalk.gray(TERM_GUTTER + "技能快照：无（首次安装时下载）"));
   if (remoteTag) {
-    if (!source) console.log(chalk.gray(TERM_GUTTER + `技能仓库最新 ${remoteTag}（本地无快照）`));
+    if (!source) console.log(chalk.gray(TERM_GUTTER + `可安装版本：${remoteTag}（本地无快照）`));
     else if (remoteTag.replace(/^v/, "") !== source.tag.replace(/^v/, "")) {
-      console.log(chalk.yellow(TERM_GUTTER + `技能仓库最新 ${remoteTag}（本地 ${source.tag}，安装时更新）`));
-    } else console.log(chalk.green(TERM_GUTTER + `技能仓库已是最新（${remoteTag}）`));
+      console.log(chalk.yellow(TERM_GUTTER + `有可用更新：${remoteTag}（本地 ${source.tag}）`));
+    } else console.log(chalk.green(TERM_GUTTER + `技能与插件已是最新（${remoteTag}）`));
   } else {
-    console.log(chalk.gray(TERM_GUTTER + `无法检查技能仓库最新版本：${remoteError}`));
+    console.log(chalk.gray(TERM_GUTTER + `无法检查技能与插件更新：${remoteError}`));
   }
   const parts = [];
   if (skills) parts.push(`技能 ${skills}`);
@@ -839,7 +839,7 @@ async function loadStartupStatus() {
     inventoryError = error.message;
     inventory = { rows: [], source: null };
   }
-  console.log(chalk.gray(TERM_GUTTER + "正在检查技能仓库最新版本…"));
+  console.log(chalk.gray(TERM_GUTTER + "正在检查技能与插件更新…"));
   try {
     return { inventory, inventoryError, remoteTag: await remotePublicTag() };
   } catch (error) {
@@ -889,10 +889,10 @@ async function ensureSource(session) {
   if (session.remoteError?.startsWith("找不到 Git")) {
     return useCachedSource(session, session.remoteError);
   }
-  console.log(TERM_GUTTER + "正在拉取技能仓库最新版本…");
+  console.log(TERM_GUTTER + "正在获取技能与插件…");
   try {
     const source = await refreshPublicSource();
-    console.log(chalk.gray(TERM_GUTTER + `已拉取技能仓库 ${source.tag} · ${source.commit.slice(0, 7)}`));
+    console.log(chalk.gray(TERM_GUTTER + `已获取技能与插件 ${source.tag} · ${source.commit.slice(0, 7)}`));
     session.source = source;
     session.pullRequired = false;
     return source;

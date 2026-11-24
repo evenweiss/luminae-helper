@@ -50,7 +50,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选宿主：插件清单聚合五个宿主，选完宿主直接安装，不再二次确认。结果表列出成功、失败和不支持的组合，并写明失败原因或「该宿主清单中没有此插件」。插件清单来自技能仓库最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选宿主：插件清单聚合五个宿主，选完宿主直接安装，不再二次确认。结果表列出成功、失败和不支持的组合，并写明失败原因或「该宿主清单中没有此插件」。插件清单来自技能与插件源最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex
@@ -92,7 +92,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 ```bash
 luminae-helper --version    # 查看版本
-luminae-helper outdated     # 检查 npm registry 与技能仓库是否有更新（技能仓库只查不拉）
+luminae-helper outdated     # 检查 npm registry 与技能/插件是否有更新（只查不拉）
 luminae-helper --help       # 查看用法
 ```
 

@@ -108,16 +108,16 @@ export async function checkOutdated() {
   try {
     latestTag = await remotePublicTag();
   } catch (error) {
-    console.log(chalk.yellow(TERM_GUTTER + `⚠ 无法检查技能仓库更新：${error.message}`));
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 无法检查技能与插件更新：${error.message}`));
     return;
   }
   if (!cached) {
-    console.log(chalk.yellow(TERM_GUTTER + `⚠ 本地没有已验证的技能快照（技能仓库最新 ${latestTag}）`));
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 本地没有已验证的技能快照（最新 ${latestTag}）`));
     console.log(TERM_GUTTER + "  安装命令: luminae-helper");
   } else if (cached.tag === latestTag) {
-    console.log(chalk.green(TERM_GUTTER + `✓ 技能仓库已是最新 (${latestTag} · ${cached.commit.slice(0, 7)})`));
+    console.log(chalk.green(TERM_GUTTER + `✓ 技能与插件已是最新 (${latestTag} · ${cached.commit.slice(0, 7)})`));
   } else {
-    console.log(chalk.yellow(TERM_GUTTER + `⚠ 技能仓库有更新: ${latestTag}（本地 ${cached.tag}）`));
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 技能与插件有更新: ${latestTag}（本地 ${cached.tag}）`));
     console.log(TERM_GUTTER + "  更新命令: luminae-helper");
   }
 }
