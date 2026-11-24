@@ -7,7 +7,7 @@ import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkill
 import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 import { collectInstalled } from "./inventory.js";
-import { PLUGIN_HOSTS, listManagedPlugins, listInstalledPlugins, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
+import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
@@ -117,8 +117,12 @@ function printTable(title, headers, data) {
 }
 
 function printResultTable(title, rows) {
-  printTable(title, ["工具", "内容", "状态", "安装方式"],
-    rows.map(row => [row.toolName, row.skillName, row.status, row.mode]));
+  const withReason = rows.some(row => row.reason);
+  const headers = withReason ? ["工具", "内容", "状态", "安装方式", "说明"] : ["工具", "内容", "状态", "安装方式"];
+  printTable(title, headers,
+    rows.map(row => withReason
+      ? [row.toolName, row.skillName, row.status, row.mode, row.reason || ""]
+      : [row.toolName, row.skillName, row.status, row.mode]));
 }
 
 export function printInstalledContent() {
@@ -606,7 +610,7 @@ async function selectKind(message) {
 }
 
 async function runInteractivePluginInstall() {
-  printSectionTitle("━━━ 选择插件宿主 ━━━");
+  printSectionTitle("━━━ 选择插件 ━━━");
   const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
   if (!tools.length) {
     console.log(chalk.yellow(TERM_GUTTER + "没有已安装的插件宿主，请先安装 Cursor、Codex、Claude Code、Hermes Agent 或 Pi。"));
@@ -615,50 +619,20 @@ async function runInteractivePluginInstall() {
   }
   const toolById = new Map(tools.map(tool => [tool.id, tool]));
   const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
-  let hostIds = [];
-  while (!hostIds.length) {
-    const answer = await runCheckbox({
-      message: "选择插件宿主:",
-      choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
-      loop: false,
-      theme,
-    });
-    const result = parseCheckboxResult(answer);
-    if (result === "back") return "back";
-    if (result === "exit") return "exit";
-    if (!result.length) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件宿主"));
-      await new Promise(r => setTimeout(r, 1200));
-      continue;
-    }
-    hostIds = result;
-  }
   let snapshot = null;
   try {
     console.log(TERM_GUTTER + "正在检查插件正式版本…");
     snapshot = await refreshPublicSource();
-    const pluginsByHost = new Map();
-    for (const hostId of hostIds) {
-      const label = toolById.get(hostId).name;
-      try {
-        pluginsByHost.set(hostId, listManagedPlugins(hostId, snapshot.root));
-      } catch (error) {
-        console.log(chalk.yellow(TERM_GUTTER + `- ${label} 不可用：${error.message}`));
-      }
-    }
-    if (!pluginsByHost.size) throw new Error("所选宿主都没有可安装的插件。");
-    const available = new Map();
-    for (const plugins of pluginsByHost.values()) {
-      for (const plugin of plugins) if (!available.has(plugin.name)) available.set(plugin.name, plugin.version);
-    }
-    const hostNames = [...pluginsByHost.keys()].map(id => toolById.get(id).name).join("、");
-    let selected = [];
-    while (!selected.length) {
+    const catalog = listAllManagedPlugins(snapshot.root);
+    if (!catalog.length) throw new Error("技能仓库当前没有可安装的插件。");
+
+    let selectedNames = [];
+    while (!selectedNames.length) {
       const answer = await runCheckbox({
-        message: `选择 ${hostNames} 插件:`,
-        choices: withNavChoices([...available].map(([name, version]) => ({
-          name: `${name}${version ? ` · ${version}` : ""}`,
-          value: name,
+        message: "选择插件:",
+        choices: withNavChoices(catalog.map(plugin => ({
+          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+          value: plugin.name,
         })), "↩ 返回主菜单"),
         loop: false,
         theme,
@@ -671,8 +645,57 @@ async function runInteractivePluginInstall() {
         await new Promise(r => setTimeout(r, 1200));
         continue;
       }
-      selected = result;
+      selectedNames = result;
     }
+    const selected = selectedNames.map(name => catalog.find(plugin => plugin.name === name));
+
+    const supportCount = hostId => selected.filter(plugin => plugin.hosts.includes(hostId)).length;
+    let hostIds = [];
+    while (!hostIds.length) {
+      const answer = await runCheckbox({
+        message: "选择宿主:",
+        choices: withNavChoices(tools.map(tool => ({
+          name: `${tool.name}（支持 ${supportCount(tool.id)}/${selected.length}）`,
+          value: tool.id,
+        })), "↩ 返回主菜单"),
+        loop: false,
+        theme,
+      });
+      const result = parseCheckboxResult(answer);
+      if (result === "back") return "back";
+      if (result === "exit") return "exit";
+      if (!result.length) {
+        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个宿主"));
+        await new Promise(r => setTimeout(r, 1200));
+        continue;
+      }
+      hostIds = result;
+    }
+
+    const combos = [];
+    const skipped = [];
+    for (const hostId of hostIds) {
+      for (const plugin of selected) {
+        if (plugin.hosts.includes(hostId)) combos.push({ hostId, name: plugin.name });
+        else skipped.push({ hostId, name: plugin.name, reason: "该宿主清单中没有此插件" });
+      }
+    }
+
+    printSectionTitle("━━━ 安装预览 ━━━");
+    for (const plugin of selected) {
+      const targets = hostIds.filter(hostId => plugin.hosts.includes(hostId)).map(hostId => toolById.get(hostId).name);
+      console.log(TERM_GUTTER + `${plugin.name} → ${targets.length ? targets.join("、") : "无"}`);
+    }
+    for (const item of skipped) {
+      console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
+    }
+    if (!combos.length) {
+      console.log(chalk.yellow(TERM_GUTTER + "所选插件和宿主没有可安装的组合。\n"));
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      return "back";
+    }
+
+    const hostNames = hostIds.map(id => toolById.get(id).name).join("、");
     const confirmation = await pick({
       message: `安装 ${selected.length} 个插件到 ${hostNames}（技能仓库 ${snapshot.tag}）？`,
       choices: [
@@ -683,15 +706,6 @@ async function runInteractivePluginInstall() {
     });
     if (confirmation === "back") return "back";
     if (confirmation !== "confirm") return "exit";
-
-    const combos = [];
-    for (const [hostId, plugins] of pluginsByHost) {
-      const names = new Set(plugins.map(plugin => plugin.name));
-      for (const name of selected) {
-        if (names.has(name)) combos.push({ hostId, name });
-        else console.log(chalk.gray(TERM_GUTTER + `- ${name} 不在 ${toolById.get(hostId).name} 的清单，跳过`));
-      }
-    }
 
     printSectionTitle("━━━ 执行中 ━━━");
     const rows = [];
@@ -707,9 +721,14 @@ async function runInteractivePluginInstall() {
         rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: "插件", ok: true, hostId });
       } catch (error) {
         failed += 1;
-        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: "失败", mode: "插件", ok: false, hostId });
-        console.log(chalk.red(TERM_GUTTER + `  ${error.message}`));
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: chalk.red("失败"), mode: "插件", reason: error.message, ok: false, hostId });
       }
+    }
+    for (const item of skipped) {
+      rows.push({
+        key: `${item.hostId}::${item.name}`, toolName: toolById.get(item.hostId).name,
+        skillName: item.name, status: chalk.yellow("不支持"), mode: "插件", reason: item.reason,
+      });
     }
     printResultTable("安装结果", rows);
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
@@ -717,6 +736,7 @@ async function runInteractivePluginInstall() {
     }
     console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
+    else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
   } catch (error) {
     if (error?.name === "ExitPromptError") return "exit";

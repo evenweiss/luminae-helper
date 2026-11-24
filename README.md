@@ -50,7 +50,7 @@ luminae-helper skill --help
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，可多选宿主，再勾选要装的插件：逐个宿主安装，最后汇总结果。插件清单来自技能仓库最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选宿主：插件清单聚合五个宿主，宿主项显示「支持 x/y」；确认前显示每个插件将装到哪些宿主，以及被跳过的组合和原因。插件清单来自技能仓库最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex

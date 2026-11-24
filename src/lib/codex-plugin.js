@@ -155,6 +155,26 @@ export function listManagedPlugins(host = "codex", root) {
   return snapshotSource(host, root).plugins;
 }
 
+/**
+ * 聚合所有插件宿主清单，得到每个插件支持哪些宿主。
+ * 同名插件只保留一条，hosts 按 PLUGIN_HOSTS 顺序累计。
+ */
+export function listAllManagedPlugins(root, hosts = PLUGIN_HOSTS) {
+  const byName = new Map();
+  for (const host of hosts) {
+    for (const plugin of listManagedPlugins(host, root)) {
+      let entry = byName.get(plugin.name);
+      if (!entry) {
+        entry = { name: plugin.name, version: plugin.version, hosts: [] };
+        byName.set(plugin.name, entry);
+      }
+      if (!entry.version && plugin.version) entry.version = plugin.version;
+      if (!entry.hosts.includes(host)) entry.hosts.push(host);
+    }
+  }
+  return [...byName.values()];
+}
+
 export function readLocalPluginSource(sourceDir, host = "codex") {
   const { catalogs = [], manifests } = hostConfig(host);
   let directory;

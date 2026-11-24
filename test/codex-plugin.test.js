@@ -11,7 +11,7 @@ vi.mock("node:os", async original => ({ ...await original(), homedir: () => nati
 vi.mock("node:child_process", () => ({
   execFile: Object.assign(() => {}, { [Symbol.for("nodejs.util.promisify.custom")]: native.run }),
 }));
-const { installPlugin, listInstalledPlugins, listManagedPlugins, readLocalPluginSource, runPluginCommand, uninstallPlugin }
+const { installPlugin, listAllManagedPlugins, listInstalledPlugins, listManagedPlugins, readLocalPluginSource, runPluginCommand, uninstallPlugin }
   = await import("../src/lib/codex-plugin.js");
 
 let root, sourceDir;
@@ -71,6 +71,14 @@ function reply(value) {
 it("lists only snapshot plugins without querying Codex's configured marketplaces", () => {
   expect(listManagedPlugins("codex", native.snapshot).map(plugin => plugin.name)).toEqual(["ai-development-workflow"]);
   expect(native.run).not.toHaveBeenCalled();
+});
+
+it("aggregates which hosts each plugin supports", () => {
+  expect(listAllManagedPlugins(native.snapshot)).toEqual([{
+    name: "ai-development-workflow",
+    version: "0.10.2",
+    hosts: ["codex", "claude-code", "cursor", "hermes-agent", "pi"],
+  }]);
 });
 
 it("installs a managed name from the snapshot on a fresh profile", async () => {
