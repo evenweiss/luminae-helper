@@ -50,7 +50,6 @@ const checkboxTheme = {
     disabledError: "This option is disabled and cannot be toggled.",
     /** 焦点在功能行时用户按了空格：提示改用回车 */
     actionRowUseEnter: "此项为功能操作，请按回车确认",
-    actionRowRequired: "请移到下方操作项后按回车",
     actionRowEmpty: "请至少选择一项",
   },
   keybindings: [],
@@ -119,7 +118,7 @@ function normalizeChoices(choices) {
 }
 
 export default createPrompt((config, done) => {
-  const { pageSize = 7, loop = true, required, validate = () => true, requireActionRow = false } = config;
+  const { pageSize = 7, loop = true, required, validate = () => true } = config;
   const shortcuts = { all: "a", invert: "i", ...config.shortcuts };
   const theme = makeTheme(checkboxTheme, config.theme);
   const { keybindings } = theme;
@@ -160,11 +159,6 @@ export default createPrompt((config, done) => {
         setNavSubmitValue(activeItem.value);
         setStatus("done");
         done([activeItem.value]);
-        return;
-      }
-
-      if (requireActionRow) {
-        setError(theme.i18n.actionRowRequired);
         return;
       }
 
@@ -283,7 +277,7 @@ export default createPrompt((config, done) => {
   ];
   if (shortcuts.all) keys.push([shortcuts.all, "all"]);
   if (shortcuts.invert) keys.push([shortcuts.invert, "invert"]);
-  keys.push(["⏎", requireActionRow ? "执行操作项" : "提交 / 执行"]);
+  keys.push(["⏎", "提交 / 执行"]);
   const helpLine = theme.style.keysHelpTip(keys);
   const lines = [
     [prefix, message].filter(Boolean).join(" "),

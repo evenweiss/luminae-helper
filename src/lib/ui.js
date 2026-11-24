@@ -182,7 +182,7 @@ async function runCheckbox(config) {
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步：选择工具") {
+async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步") {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -202,7 +202,6 @@ async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步�
       message: "选择技能:",
       choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出", actionLabel),
       loop: false,
-      requireActionRow: true,
       theme,
     });
 
@@ -222,7 +221,7 @@ async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步�
 }
 
 // ── Step 2: Select tools (checkbox multi-select) ──
-async function stepSelectTools(installedTools, actionLabel = "下一步：预览确认") {
+async function stepSelectTools(installedTools, actionLabel = "下一步") {
   while (true) {
     await afterPromptFlush();
     printBanner();
@@ -242,7 +241,6 @@ async function stepSelectTools(installedTools, actionLabel = "下一步：预览
       message: "选择工具:",
       choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出", actionLabel),
       loop: false,
-      requireActionRow: true,
       theme,
     });
 
@@ -478,13 +476,13 @@ async function runFlow(isUninstall, session) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills(!isUninstall, "下一步：选择工具");
+      const result = await stepSelectSkills(!isUninstall, "下一步");
       if (result === "back") return "back";
       if (result === "abort") return "abort";
       selectedSkillIds = result;
       step = 2;
     } else if (step === 2) {
-      const result = await stepSelectTools(installedTools, "下一步：预览确认");
+      const result = await stepSelectTools(installedTools, "下一步");
       if (result === "back") { step = 1; continue; }
       if (result === "abort") return "abort";
       selectedToolIds = result;
@@ -617,9 +615,8 @@ async function runInteractivePluginInstall(session) {
         choices: withNavChoices(catalog.map(plugin => ({
           name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
           value: plugin.name,
-        })), "↩ 返回主菜单", "✕ 退出", "下一步：选择工具"),
+        })), "↩ 返回主菜单", "✕ 退出", "下一步"),
         loop: false,
-        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
@@ -640,7 +637,6 @@ async function runInteractivePluginInstall(session) {
         message: "选择工具:",
         choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "开始安装"),
         loop: false,
-        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
@@ -730,9 +726,8 @@ async function runInteractivePluginUninstall() {
   while (!hostIds.length) {
     const answer = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步：选择插件"),
+      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
       loop: false,
-      requireActionRow: true,
       theme,
     });
     const result = parseCheckboxResult(answer);
@@ -757,9 +752,8 @@ async function runInteractivePluginUninstall() {
           name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
           value: plugin.name,
           checked: false,
-        })), "↩ 返回主菜单", "✕ 退出", hostId === hostIds[hostIds.length - 1] ? "下一步：确认卸载" : "下一步"),
+        })), "↩ 返回主菜单", "✕ 退出", "下一步"),
         loop: false,
-        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
