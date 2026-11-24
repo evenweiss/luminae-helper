@@ -185,6 +185,7 @@ it("steps back through plugin selection, tools and confirmation", async () => {
   const pluginStep = prompts.checkbox.mock.calls[0][0];
   const toolStep = prompts.checkbox.mock.calls[1][0];
   const confirmStep = prompts.select.mock.calls[2][0];
+  expect(pluginStep.choices.find(choice => choice.value === "workflow").checked).toBe(true);
   expect(pluginStep.choices.find(choice => choice.value === "__back__").name).toBe("↩ 返回主菜单");
   expect(toolStep.choices.find(choice => choice.value === "__back__").name).toBe("↩ 上一步");
   expect(confirmStep.choices.find(choice => choice.value === "back").name).toBe("↩ 上一步");

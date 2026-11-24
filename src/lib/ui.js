@@ -645,6 +645,7 @@ async function runInteractivePluginInstall(session) {
             choices: withNavChoices(catalog.map(plugin => ({
               name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
               value: plugin.name,
+              checked: true,
             })), "↩ 返回主菜单", "✕ 退出", "下一步"),
             loop: false,
             theme,
