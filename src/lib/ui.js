@@ -160,7 +160,7 @@ function withNavChoices(items, backLabel, exitLabel = "✕ 退出", actionLabel 
     ...items,
     new Separator(),
     ...(actionLabel ? [{ name: chalk.green("✓ " + actionLabel), value: "__next__" }] : []),
-    { name: chalk.yellow(backLabel), value: "__back__" },
+    { name: backLabel, value: "__back__" },
     ...(exitLabel ? [{ name: exitLabel, value: "__exit__" }] : []),
   ];
 }
