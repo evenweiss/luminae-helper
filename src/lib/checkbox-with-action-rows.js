@@ -237,7 +237,7 @@ export default createPrompt((config, done) => {
       if (item.disabled) {
         const disabledLabel = typeof item.disabled === "string" ? item.disabled : "(disabled)";
         const checkbox = item.checked ? theme.icon.disabledChecked : theme.icon.disabledUnchecked;
-        return theme.style.disabled(`${cursor}${checkbox} ${item.name} ${disabledLabel}`);
+        return theme.style.disabled(`${cursor} ${checkbox} ${item.name} ${disabledLabel}`);
       }
       // 功能行：不占「○ + 空格」列——文案紧跟指针，与勾选行里圆圈所在列对齐（视觉上更靠左）
       if (isActionRow(item)) {
@@ -253,7 +253,7 @@ export default createPrompt((config, done) => {
       const checkbox = item.checked ? theme.icon.checked : theme.icon.unchecked;
       const name = item.checked ? item.checkedName : item.name;
       const color = isActive ? theme.style.highlight : (x) => x;
-      return color(`${cursor}${checkbox} ${name}`);
+      return color(`${cursor} ${checkbox} ${name}`);
     },
     pageSize,
     loop,
