@@ -29,6 +29,7 @@ import { styleText } from "node:util";
 /** 与 ui.js 中 parseCheckboxResult 约定的导航返回值 */
 export const NAV_BACK = "__back__";
 export const NAV_EXIT = "__exit__";
+export const NAV_NEXT = "__next__";
 
 const checkboxTheme = {
   icon: {
@@ -49,6 +50,7 @@ const checkboxTheme = {
     disabledError: "This option is disabled and cannot be toggled.",
     /** 焦点在功能行时用户按了空格：提示改用回车 */
     actionRowUseEnter: "此项为功能操作，请按回车确认",
+    actionRowEmpty: "请至少选择一项",
   },
   keybindings: [],
 };
@@ -60,7 +62,7 @@ const checkboxTheme = {
 function isActionRow(item) {
   if (Separator.isSeparator(item) || item == null || typeof item !== "object") return false;
   const v = /** @type {{ value?: unknown }} */ (item).value;
-  return v === NAV_BACK || v === NAV_EXIT;
+  return v === NAV_BACK || v === NAV_EXIT || v === NAV_NEXT;
 }
 
 function isSelectable(item) {
@@ -141,6 +143,18 @@ export default createPrompt((config, done) => {
       const activeItem = items[active];
       // 功能行：回车立即结束 prompt，返回单元素数组供 parseCheckboxResult 识别
       if (activeItem && !Separator.isSeparator(activeItem) && isActionRow(activeItem)) {
+        if (activeItem.value === NAV_NEXT) {
+          const selection = items.filter(isChecked);
+          if (!selection.length) {
+            setError(theme.i18n.actionRowEmpty);
+            return;
+          }
+          setError(undefined);
+          setNavSubmitValue(null);
+          setStatus("done");
+          done(selection.map((choice) => choice.value));
+          return;
+        }
         setError(undefined);
         setNavSubmitValue(activeItem.value);
         setStatus("done");
@@ -223,7 +237,7 @@ export default createPrompt((config, done) => {
       if (item.disabled) {
         const disabledLabel = typeof item.disabled === "string" ? item.disabled : "(disabled)";
         const checkbox = item.checked ? theme.icon.disabledChecked : theme.icon.disabledUnchecked;
-        return theme.style.disabled(`${cursor}${checkbox} ${item.name} ${disabledLabel}`);
+        return theme.style.disabled(`${cursor} ${checkbox} ${item.name} ${disabledLabel}`);
       }
       // 功能行：不占「○ + 空格」列——文案紧跟指针，与勾选行里圆圈所在列对齐（视觉上更靠左）
       if (isActionRow(item)) {
@@ -239,7 +253,7 @@ export default createPrompt((config, done) => {
       const checkbox = item.checked ? theme.icon.checked : theme.icon.unchecked;
       const name = item.checked ? item.checkedName : item.name;
       const color = isActive ? theme.style.highlight : (x) => x;
-      return color(`${cursor}${checkbox} ${name}`);
+      return color(`${cursor} ${checkbox} ${name}`);
     },
     pageSize,
     loop,
@@ -265,9 +279,10 @@ export default createPrompt((config, done) => {
   if (shortcuts.invert) keys.push([shortcuts.invert, "invert"]);
   keys.push(["⏎", "提交 / 执行"]);
   const helpLine = theme.style.keysHelpTip(keys);
+  const indentedPage = page.split("\n").map((line) => " " + line).join("\n");
   const lines = [
     [prefix, message].filter(Boolean).join(" "),
-    page,
+    indentedPage,
     " ",
     description ? theme.style.description(description) : "",
     errorMsg ? theme.style.error(errorMsg) : "",

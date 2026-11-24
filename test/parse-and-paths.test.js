@@ -22,12 +22,10 @@ describe("parseSkillMeta (via discoverSkills)", () => {
     const root = mkdtempSync(join(tmpdir(), "luminae-test-skills-"));
     mkdirSync(join(root, "commands", "git-commit"), { recursive: true });
     writeFileSync(join(root, "commands", "git-commit", "SKILL.md"), "# git-commit\n\n> No frontmatter here\n");
-    globalThis.__LUMINAE_PACKAGE_ROOT__ = root;
     try {
-      const found = discoverSkills().find(s => s.id === "git-commit");
+      const found = discoverSkills(root).find(s => s.id === "git-commit");
       expect(found.name).toBe("Git Commit");
     } finally {
-      delete globalThis.__LUMINAE_PACKAGE_ROOT__;
       rmSync(root, { recursive: true, force: true });
     }
   });

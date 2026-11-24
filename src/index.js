@@ -1,11 +1,20 @@
-export { isManagedSkill } from "./lib/managed-by.js";
-// 包装器复用带「返回 / 退出」功能行的多选列表
-export { default as checkboxWithActionRows, NAV_BACK, NAV_EXIT } from "./lib/checkbox-with-action-rows.js";
+const usage = `用法：luminae-helper [命令]
 
-export async function runCli(options = {}) {
-  const argv = Array.isArray(options.argv) ? options.argv : process.argv.slice(2);
-  if (options.packageRoot) {
-    globalThis.__LUMINAE_PACKAGE_ROOT__ = options.packageRoot;
+  （无命令）                    交互式安装 / 更新 / 卸载
+  list                          查看已安装的技能与插件
+  outdated                      检查工具、技能与插件更新
+  skill install <技能ID...|--all> --tool <工具ID>
+  skill uninstall <技能ID...|--all> --tool <工具ID>
+  skill --help
+  plugin install|uninstall <插件名> --tool <工具>
+  plugin --help
+  --version, -v
+  --help, -h`;
+
+export async function runCli(argv = process.argv.slice(2)) {
+  if (["--help", "-h"].includes(argv[0])) {
+    console.log(usage);
+    return 0;
   }
 
   if (argv[0] === "plugin" || argv[0] === "skill") {
@@ -33,25 +42,28 @@ export async function runCli(options = {}) {
     return 0;
   }
 
-  const { runInteractive, runOperation, TERM_GUTTER } = await import("./lib/ui.js");
+  if (argv[0] === "list") {
+    const { printInstalledContent } = await import("./lib/ui.js");
+    printInstalledContent();
+    return 0;
+  }
+
+  if (argv.length) {
+    console.error(`  未知命令：${argv[0]}\n`);
+    console.error(usage);
+    return 1;
+  }
+
+  const { runInteractive, TERM_GUTTER } = await import("./lib/ui.js");
   try {
-    if (options.operation) {
-      // 面板里显式选择「退出」时，把结束整个工具的意图交给包装器
-      if (await runOperation(options.operation) === "abort") return "abort";
-    } else await runInteractive();
+    await runInteractive();
     return 0;
   } catch (error) {
     if (error?.name === "ExitPromptError") {
-      if (!options.operation) console.log("\n" + TERM_GUTTER + "👋 Bye!\n");
+      console.log("\n" + TERM_GUTTER + "👋 Bye!\n");
       return 0;
     }
     console.error("\n" + TERM_GUTTER + "Error:", error.message ?? String(error));
     return 1;
   }
-}
-
-/** Execute one shared public-skill flow, then return control to a wrapper. */
-export async function runSkillOperation(action, options = {}) {
-  if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
-  return runCli({ ...options, argv: [], operation: action });
 }

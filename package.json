@@ -1,9 +1,8 @@
 {
   "name": "luminae-helper",
-  "version": "2.0.0",
-  "description": "Install public AI agent skills to coding tools",
+  "version": "3.0.0",
+  "description": "Install AI agent skills to coding tools",
   "type": "module",
-  "main": "src/index.js",
   "bin": {
     "luminae-helper": "src/cli.js"
   },
@@ -12,17 +11,13 @@
     "src/index.js",
     "src/lib/*.js",
     "src/utils/*.js",
-    "codex-plugins/",
     "README.md",
     "CHANGELOG.md"
   ],
   "scripts": {
     "start": "node src/cli.js",
     "dev": "node --watch src/cli.js",
-    "prepare:plugins": "node scripts/prepare-plugins.js",
-    "pretest": "npm run prepare:plugins",
-    "test": "vitest run",
-    "prepack": "npm run prepare:plugins"
+    "test": "vitest run"
   },
   "keywords": [
     "claude",
@@ -39,7 +34,7 @@
     "url": "git+https://github.com/evenweiss/luminae-helper.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "^20.17.0 || ^22.13.0 || >=23.5.0"
   },
   "dependencies": {
     "@inquirer/ansi": "^2.0.5",
@@ -53,8 +48,5 @@
   },
   "devDependencies": {
     "vitest": "^4.1.6"
-  },
-  "exports": {
-    ".": "./src/index.js"
   }
 }

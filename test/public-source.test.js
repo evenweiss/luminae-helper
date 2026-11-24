@@ -9,8 +9,9 @@ import * as source from "../src/lib/public-source.js";
 
 const children = [];
 const roots = [];
-async function startChild(code) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["pipe", "pipe", "pipe"] });
+const itPosix = process.platform === "win32" ? it.skip : it; // Windows locks cache files during rename.
+async function startChild(code, env = process.env) {
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["pipe", "pipe", "pipe"], env });
   children.push(child);
   let errors = ""; child.stderr.on("data", chunk => { errors += chunk; });
   const ready = await new Promise((resolve, reject) => {
@@ -48,7 +49,7 @@ describe("public skill source", () => {
     const expected = f.commit("release"); f.git("tag", "--no-sign", "-am", "release", "v0.10.0");
     f.commit("unreleased"); f.git("tag", "1.0.0-beta.1"); f.git("tag", "notes");
     const result = await source.refreshPublicSource(f.options);
-    expect(result.tag).toBe("v0.10.0"); expect(result.commit).toBe(expected);
+    expect(result.tag).toBe("0.10.0"); expect(result.commit).toBe(expected);
     expect(readFileSync(join(result.root, "skills/demo/SKILL.md"), "utf8")).toContain("release");
     expect(readFileSync(join(result.root, "skills/demo/SKILL.md"), "utf8")).not.toContain("unreleased");
   });
@@ -60,6 +61,11 @@ describe("public skill source", () => {
     expect(second.tag).toBe("0.2.0"); expect(second.root).not.toBe(first.root);
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toContain("first");
     expect(source.readCachedSource(f.options).commit).toBe(second.commit);
+  });
+  it("checks the remote latest tag without creating any cache and strips a v prefix", async () => {
+    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0"); f.git("tag", "v0.2.0");
+    expect(await source.remotePublicTag(f.options)).toBe("0.2.0");
+    expect(existsSync(f.options.cacheDir)).toBe(false);
   });
   it("reports network failure but retains an explicitly readable validated cache", async () => {
     const f = fixture(); f.commit("cached"); f.git("tag", "0.1.0");
@@ -82,7 +88,7 @@ describe("public skill source", () => {
     await expect(source.refreshPublicSource(f.options)).rejects.toThrow("快照已被修改");
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toBe("keep local edit");
   });
-  it("allows concurrent first installs and concurrent release refreshes to share the cache", async () => {
+  itPosix("allows concurrent first installs and concurrent release refreshes to share the cache", async () => {
     const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
     const first = await Promise.allSettled([source.refreshPublicSource(f.options), source.refreshPublicSource(f.options)]);
     expect(first.map(r => r.status)).toEqual(["fulfilled", "fulfilled"]);
@@ -146,7 +152,7 @@ describe("public skill source", () => {
     expect(existsSync(ready.root)).toBe(false);
     expect(readdirSync(join(f.options.cacheDir, "snapshots"))).toEqual([second.commit]);
   });
-  it("reclaims a crashed reader's lease and an abandoned operation lock", async () => {
+  itPosix("reclaims a crashed reader's lease and an abandoned operation lock", async () => {
     const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
     const module = pathToFileURL(join(import.meta.dirname, "../src/lib/public-source.js")).href;
     const lifecycle = pathToFileURL(join(import.meta.dirname, "../src/lib/cache-lifecycle.js")).href;
@@ -175,6 +181,21 @@ describe("public skill source", () => {
     f.commit("second"); f.git("tag", "0.2.0");
     const second = await source.refreshPublicSource(f.options); await first.release(); await second.release();
     expect(existsSync(first.root)).toBe(true);
+  });
+  it("tells the user to install Git when the executable is missing", async () => {
+    const f = fixture();
+    const module = pathToFileURL(join(import.meta.dirname, "../src/lib/public-source.js")).href;
+    const { ready } = await startChild(`
+      import { refreshPublicSource } from ${JSON.stringify(module)};
+      try { await refreshPublicSource(${JSON.stringify(f.options)}); }
+      catch (error) { console.log(JSON.stringify({ message: error.message })); }
+    `, { ...process.env, PATH: "/nonexistent" });
+    expect(ready.message).toContain("找不到 Git");
+  });
+  it("summarizes a network failure as an actionable message", async () => {
+    const f = fixture();
+    await expect(source.refreshPublicSource({ ...f.options, repo: "http://127.0.0.1:1/ai-skills.git" }))
+      .rejects.toThrow(/网络或代理不可用/);
   });
   it("does not accept another remote's cached source", async () => {
     const f = fixture(); f.commit("cached"); f.git("tag", "0.1.0");

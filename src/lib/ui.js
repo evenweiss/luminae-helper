@@ -4,15 +4,29 @@ import { select as Select, input, Separator } from "@inquirer/prompts";
 import wcswidth from "wcwidth";
 import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
-import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
+import { refreshPublicSource, acquireCachedSource, remotePublicTag } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
-import { PLUGIN_HOSTS, listManagedPlugins, readLocalPluginSource, installPlugin, printPluginResult } from "./codex-plugin.js";
+import { collectInstalled } from "./inventory.js";
+import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
 
 /**
  * 终端主内容区左侧统一的两空格缩进（与顶栏、收尾、错误提示对齐）。
  * 所有面向用户的 `console.log` / 区块标题应以此开头，避免有的顶格、有的多空格。
  */
 export const TERM_GUTTER = "  ";
+const PROMPT_PREFIX = chalk.cyan.bold(" ▌");
+const PROMPT_THEME = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
+const SELECT_THEME = { prefix: chalk.cyan.bold("▌"), style: { highlight: (t) => chalk.cyan(t) } };
+const canAnimateProgress = () => Boolean(process.stdout.isTTY);
+
+/** 单行进度：覆盖上一行，避免批量操作留下整屏「正在…」。 */
+function showProgress(text) {
+  if (canAnimateProgress()) process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray(text)}`);
+}
+
+function clearProgress() {
+  if (canAnimateProgress()) process.stdout.write("\r\x1b[2K");
+}
 
 /**
  * 传给所有 @inquirer prompt 的 context。
@@ -36,7 +50,7 @@ function afterPromptFlush() {
 
 /**
  * 打印步骤区块标题（青粗体 + 统一左侧 gutter + 段后空行）。
- * @param {string} title 标题全文，例如「━━━ 选择 Skill ━━━」
+ * @param {string} title 标题全文，例如「━━━ 选择技能 ━━━」
  */
 function printSectionTitle(title) {
   console.log(chalk.cyan.bold(TERM_GUTTER + title + "\n"));
@@ -46,7 +60,7 @@ let publicSourceLabel = "";
 
 function printBanner() {
   console.clear();
-  const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("  LUMINAE HELPER  ");
+  const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("LUMINAE HELPER");
   console.log("\n" + TERM_GUTTER + banner);
   console.log(chalk.gray(TERM_GUTTER + "AI coding tools' skills manager\n"));
   if (publicSourceLabel) console.log(TERM_GUTTER + publicSourceLabel + "\n");
@@ -82,7 +96,7 @@ export function parseCheckboxResult(ans) {
 }
 
 function installModeDescription(target) {
-  return target.installMode === "file" ? "旧命令文件" : "Skill 目录";
+  return target.installMode === "file" ? "旧命令文件" : "技能目录";
 }
 
 function stripAnsi(text) {
@@ -99,11 +113,9 @@ function padCell(text, width) {
   return value + " ".repeat(Math.max(0, width - displayWidth(value)));
 }
 
-function printResultTable(title, rows) {
-  if (rows.length === 0) return;
+function printTable(title, headers, data) {
+  if (data.length === 0) return;
 
-  const headers = ["工具", "内容", "状态", "安装方式"];
-  const data = rows.map(row => [row.toolName, row.skillName, row.status, row.mode]);
   const widths = headers.map((header, idx) => Math.max(displayWidth(header), ...data.map(row => displayWidth(row[idx]))));
   const gap = "  ";
   const formatRow = (cells) => TERM_GUTTER + cells.map((cell, idx) => padCell(cell, widths[idx])).join(gap);
@@ -111,10 +123,30 @@ function printResultTable(title, rows) {
   console.log(chalk.cyan.bold(TERM_GUTTER + title));
   console.log(formatRow(headers.map(header => chalk.gray(header))));
   console.log(TERM_GUTTER + widths.map(width => chalk.gray("─".repeat(width))).join(gap));
-  for (const row of rows) {
-    console.log(formatRow([row.toolName, row.skillName, row.status, row.mode]));
+  for (const row of data) {
+    console.log(formatRow(row));
   }
   console.log();
+}
+
+function printResultTable(title, rows) {
+  const withReason = rows.some(row => row.reason);
+  const headers = withReason ? ["工具", "内容", "状态", "类型", "说明"] : ["工具", "内容", "状态", "类型"];
+  printTable(title, headers,
+    rows.map(row => withReason
+      ? [row.toolName, row.skillName, row.status, row.mode, row.reason || ""]
+      : [row.toolName, row.skillName, row.status, row.mode]));
+}
+
+export function printInstalledContent(content = collectInstalled()) {
+  const { rows } = content;
+  if (rows.length === 0) {
+    console.log(TERM_GUTTER + "没有检测到 Helper 管理的技能或插件。");
+  } else {
+    printTable("已安装内容", ["类型", "工具", "条目", "版本"],
+      rows.map(row => [row.type, row.tool, row.name, row.version]));
+  }
+  return rows;
 }
 
 function mergeResultRows(...rowGroups) {
@@ -132,13 +164,19 @@ function mergeResultRows(...rowGroups) {
  * @param {{ name: string, value: string }[]} items
  * @param {string} backLabel
  */
-function withNavChoices(items, backLabel, exitLabel = "✕ 退出") {
+function withNavChoices(items, backLabel, exitLabel = "✕ 退出", actionLabel = null) {
   return [
     ...items,
     new Separator(),
-    { name: chalk.yellow(backLabel), value: "__back__" },
+    ...(actionLabel ? [{ name: chalk.green("✓ " + actionLabel), value: "__next__" }] : []),
+    { name: backLabel, value: "__back__" },
     ...(exitLabel ? [{ name: exitLabel, value: "__exit__" }] : []),
   ];
+}
+
+/** 单选菜单统一关闭循环：到最后一项再按↓不再跳回第一项。 */
+function pick(config) {
+  return Select({ loop: false, theme: SELECT_THEME, ...config }, inquirerContext);
 }
 
 /**
@@ -149,33 +187,32 @@ function withNavChoices(items, backLabel, exitLabel = "✕ 退出") {
  * @returns {Promise<string[]>}
  */
 async function runCheckbox(config) {
-  return checkboxWithActionRows(config, inquirerContext).catch((err) => {
+  return checkboxWithActionRows({ theme: PROMPT_THEME, ...config }, inquirerContext).catch((err) => {
     if (err?.name === "ExitPromptError") return ["__exit__"];
     return ["__exit__"];
   });
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills() {
+async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步") {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择 Skill ━━━");
 
     const skillChoices = SKILLS.map(s => ({
-      name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
+      name: s.name + (s.legacyCommand ? "（旧命令）" : "") + " - " + s.description,
       value: s.id,
-      checked: true,
+      checked: defaultChecked,
     }));
 
     const theme = {
-      prefix: chalk.cyan(" ◆"),
+      prefix: PROMPT_PREFIX,
       style: { highlight: (t) => chalk.cyan(t) },
     };
 
     const ans = await runCheckbox({
-      message: "选择 Skill:",
-      choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出"),
+      message: "选择技能:",
+      choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出", actionLabel),
       loop: false,
       theme,
     });
@@ -186,7 +223,7 @@ async function stepSelectSkills() {
     if (result === "exit") return "abort";
 
     if (result.length === 0) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个 Skill"));
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个技能"));
       await new Promise(r => setTimeout(r, 1200));
       continue;
     }
@@ -196,11 +233,10 @@ async function stepSelectSkills() {
 }
 
 // ── Step 2: Select tools (checkbox multi-select) ──
-async function stepSelectTools(installedTools) {
+async function stepSelectTools(installedTools, actionLabel = "下一步") {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择目标工具 ━━━");
 
     const toolChoices = installedTools.map(t => ({
       name: t.name,
@@ -208,14 +244,14 @@ async function stepSelectTools(installedTools) {
     }));
 
     const theme = {
-      prefix: chalk.cyan(" ◆"),
+      prefix: PROMPT_PREFIX,
       style: { highlight: (t) => chalk.cyan(t) },
     };
 
     // 第二步：底部为返回/退出功能行（移上后回车触发）
     const ans = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出"),
+      choices: withNavChoices(toolChoices, "↩ 上一步", "✕ 退出", actionLabel),
       loop: false,
       theme,
     });
@@ -246,28 +282,45 @@ function asIdArray(v) {
 }
 
 // ── Step 3: Preview + Confirm（仅标题 + 确认菜单；不再展示 Skill/工具明细）──
-async function stepPreviewConfirm(isUninstall, embedded = false) {
+async function stepPreviewConfirm(isUninstall, skillIds, toolIds) {
   await afterPromptFlush();
   printBanner();
   const actionLabel = isUninstall ? "卸载" : "安装";
   printSectionTitle("━━━ " + actionLabel + "预览 ━━━");
-  // 第三步：标题下方不再打印 Skill/工具明细列表，由确认菜单直接操作
+  const rows = [];
+  let actionable = 0;
+  for (const toolId of toolIds) {
+    const tool = TOOLS.find(t => t.id === toolId);
+    for (const skillId of skillIds) {
+      const skill = SKILLS.find(item => item.id === skillId);
+      if (!tool || !skill) continue;
+      const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
+      const status = target
+        ? `待${actionLabel}`
+        : isUninstall ? "未安装" : "不支持";
+      if (target) actionable += 1;
+      rows.push([tool.name, skill.name, status]);
+    }
+  }
+  printTable(`待${actionLabel}内容`, ["工具", "技能", "状态"], rows);
 
-  const ans = await Select(
+  if (isUninstall && actionable === 0) {
+    console.log(chalk.gray(TERM_GUTTER + `没有需要卸载的内容（${rows.length} 项未安装）。`));
+    await input({ message: "按回车返回上一步…" }, inquirerContext).catch(() => {});
+    return "back";
+  }
+
+  const ans = await pick(
     {
       message: "确认" + actionLabel + "？",
       choices: [
         { name: "✓ 确认" + actionLabel, value: "confirm" },
-        { name: "↩ 返回上一步", value: "back" },
-        ...(embedded ? [{ name: "↩ 返回主菜单", value: "menu" }] : []),
+        { name: "↩ 上一步", value: "back" },
         { name: "✕ 退出", value: "exit" },
       ],
-      theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
-    },
-    inquirerContext
+    }
   ).catch(() => "back");
 
-  if (ans === "menu") return "exit"; // 结束本次操作，回包装器主菜单
   if (ans === "exit") return "abort"; // 退出整个工具
   return ans;
 }
@@ -285,6 +338,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const sids = asIdArray(skillIds);
   const tids = asIdArray(toolIds);
   await afterPromptFlush();
+  // 卸载结果不再描述“已安装内容”这个输入来源。
+  if (isUninstall) publicSourceLabel = "";
   printBanner();
   console.log();
   printSectionTitle("━━━ 执行中 ━━━");
@@ -296,21 +351,30 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const permanentFailedKeys = new Set();
   /** 本轮执行结果，用于最终表格展示 */
   const resultRows = [];
-  const total = tids.length * sids.length;
+  // 进度分母只统计会真正执行的组合，未安装/不支持的行不计入。
+  const total = tids.reduce((count, toolId) => count + sids.filter(skillId => {
+    const key = `${toolId}::${skillId}`;
+    if (failedKeys && !failedKeys.has(key)) return false;
+    const skill = SKILLS.find(s => s.id === skillId);
+    return Boolean(skill?.installTargets?.some(tgt => tgt.toolId === toolId));
+  }).length, 0);
   let current = 0;
+  let successCount = 0;
+  let notInstalledCount = 0;
 
   for (const toolId of tids) {
     const tool = TOOLS.find(t => t.id === toolId);
     if (!tool) {
+      clearProgress();
       console.log(chalk.gray(TERM_GUTTER + "- 工具 " + toolId + " 未识别，跳过"));
       continue;
     }
 
     for (const skillId of sids) {
-      current += 1;
       const skill = SKILLS.find(s => s.id === skillId);
       if (!skill) {
-        console.log(chalk.gray(TERM_GUTTER + "- Skill " + skillId + " 未识别，跳过"));
+        clearProgress();
+        console.log(chalk.gray(TERM_GUTTER + "- 技能 " + skillId + " 未识别，跳过"));
         continue;
       }
 
@@ -318,21 +382,33 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
       // 如果是重试模式，只执行之前失败的组合
       if (failedKeys && !failedKeys.has(key)) continue;
 
-      console.log(chalk.gray(TERM_GUTTER + `正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`));
-
       const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
       if (!target) {
-        resultRows.push({
-          key,
-          toolName: tool.name,
-          skillName: skill.name,
-          status: chalk.yellow("不支持"),
-          mode: "不适用",
-        });
-        allSuccess = false;
-        permanentFailedKeys.add(key);
+        if (isUninstall) {
+          resultRows.push({
+            key,
+            toolName: tool.name,
+            skillName: skill.name,
+            status: chalk.yellow("未安装"),
+            mode: "—",
+          });
+          notInstalledCount += 1;
+        } else {
+          resultRows.push({
+            key,
+            toolName: tool.name,
+            skillName: skill.name,
+            status: chalk.yellow("不支持"),
+            mode: "—",
+          });
+          allSuccess = false;
+          permanentFailedKeys.add(key);
+        }
         continue;
       }
+
+      current += 1;
+      showProgress(`正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`);
 
       if (isUninstall) {
         const result = uninstallSkillFromTool(skill, tool);
@@ -344,13 +420,15 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             status: chalk.green("已卸载"),
             mode: installModeDescription(target),
           });
+          successCount += 1;
         } else {
           resultRows.push({
             key,
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.yellow("未卸载"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // "未安装" 不可重试，"非本工具安装" 也不可重试
@@ -366,13 +444,15 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             status: chalk.green("已安装"),
             mode: installModeDescription(target),
           });
+          successCount += 1;
         } else if (result.skipped) {
           resultRows.push({
             key,
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.yellow("已跳过"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // 目标被非本工具内容占用，重试也不会变
@@ -383,7 +463,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
             toolName: tool.name,
             skillName: skill.name,
             status: chalk.red("失败"),
-            mode: result.message,
+            mode: "—",
+            reason: result.message,
           });
           allSuccess = false;
           // 安装失败可能是临时 I/O 问题，可重试
@@ -393,9 +474,17 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
     }
   }
 
+  clearProgress();
   console.log();
   if (allSuccess) {
-    console.log(chalk.green(TERM_GUTTER + "✅ 操作完成！\n"));
+    if (successCount > 0) {
+      console.log(chalk.green(TERM_GUTTER + `✅ ${isUninstall ? "已卸载" : "已安装"} ${successCount} 项\n`));
+      if (isUninstall && notInstalledCount > 0) {
+        console.log(chalk.gray(TERM_GUTTER + `${notInstalledCount} 项未安装，已跳过\n`));
+      }
+    } else {
+      console.log(chalk.gray(TERM_GUTTER + `没有需要${isUninstall ? "卸载" : "安装"}的内容（${notInstalledCount} 项未安装）\n`));
+    }
   } else {
     const parts = [];
     if (retryableFailedKeys.size > 0) parts.push(`${retryableFailedKeys.size} 项可重试`);
@@ -407,13 +496,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
 }
 
 // ── Unified flow (install / uninstall) ──
-async function runFlow(isUninstall, embedded = false) {
-  let heldSource;
-  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }, embedded); }
-  finally { await heldSource?.release?.(); }
-}
-
-async function runFlowWithSource(isUninstall, holdSource, embedded) {
+async function runFlow(isUninstall, session) {
   const installedTools = detectInstalledTools().filter(t => t.installed);
   if (installedTools.length === 0) {
     await afterPromptFlush();
@@ -428,7 +511,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
     await input(
       {
         message: "按回车返回主菜单...",
-        theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+        theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
       },
       inquirerContext
     ).catch(() => {});
@@ -439,36 +522,18 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
     useInstalledSkills();
     publicSourceLabel = "已安装的受管内容（离线卸载）";
   } else {
-    let source;
-    console.log(TERM_GUTTER + "正在检查公共技能正式版本…");
-    try {
-      source = await refreshPublicSource();
-      holdSource(source);
-      publicSourceLabel = `公共技能 ${source.tag} · ${source.commit}`;
-    } catch (error) {
-      console.log(chalk.yellow(TERM_GUTTER + `公共技能更新失败：${error.message}`));
-      const cached = await acquireCachedSource();
-      if (cached) holdSource(cached);
-      if (!cached) {
-        console.log(TERM_GUTTER + "没有可用的已验证缓存，本次安装已停止。");
-        await input({ message: "按回车返回主菜单…" }, inquirerContext);
-        return "back";
-      }
-      const choice = await Select({
-        message: `是否使用旧缓存 ${cached.tag} · ${cached.commit}？`,
-        choices: [
-          { name: "返回，不安装", value: "back" },
-          { name: "使用此缓存安装（未确认是最新版本）", value: "cache" },
-        ],
-      }, inquirerContext);
-      if (choice !== "cache") return "back";
-      source = cached;
-      publicSourceLabel = `公共技能旧缓存 ${source.tag} · ${source.commit}（未确认最新）`;
+    const source = await ensureSource(session);
+    if (!source) {
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      return "back";
     }
+    publicSourceLabel = session.usedFallback
+      ? `技能旧缓存 ${source.tag}（未确认最新）`
+      : `技能 ${source.tag}`;
     setSkillsSource(source.root);
   }
   if (SKILLS.length === 0) {
-    console.log(TERM_GUTTER + "没有可操作的 Skill。");
+    console.log(TERM_GUTTER + "没有可操作的技能。");
     await input({ message: "按回车返回主菜单…" }, inquirerContext);
     return "back";
   }
@@ -479,19 +544,19 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills();
+      const result = await stepSelectSkills(!isUninstall, "下一步");
       if (result === "back") return "back";
       if (result === "abort") return "abort";
       selectedSkillIds = result;
       step = 2;
     } else if (step === 2) {
-      const result = await stepSelectTools(installedTools);
+      const result = await stepSelectTools(installedTools, "下一步");
       if (result === "back") { step = 1; continue; }
       if (result === "abort") return "abort";
       selectedToolIds = result;
       step = 3;
     } else if (step === 3) {
-      const result = await stepPreviewConfirm(isUninstall, embedded);
+      const result = await stepPreviewConfirm(isUninstall, selectedSkillIds, selectedToolIds);
       if (result === "back") { step = 2; continue; }
       if (result === "abort") return "abort";
       if (result === "exit") return "exit";
@@ -502,8 +567,8 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
         printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
         await input(
           {
-            message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
-            theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+            message: "按任意键退出...",
+            theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
         ).catch(() => {});
@@ -530,8 +595,8 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
             printResultTable("安装结果", accumulatedResultRows);
             await input(
               {
-                message: embedded ? "按回车返回主菜单..." : "按任意键退出...",
-                theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+                message: "按任意键退出...",
+                theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
             ).catch(() => {});
@@ -539,11 +604,11 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
           } else if (retrySuccess && accumulatedPermanent.size > 0) {
             // 重试成功但仍有不可重试的失败项（如"不支持"）
             printResultTable("安装结果", accumulatedResultRows);
-            console.log(chalk.yellow(TERM_GUTTER + `⚠ ${accumulatedPermanent.size} 项不可重试的操作已跳过（不支持或非本工具安装）\n`));
+            console.log(chalk.yellow(TERM_GUTTER + `⚠ ${accumulatedPermanent.size} 项不可重试，已跳过，请检查说明\n`));
             await input(
               {
                 message: "按任意键返回主菜单...",
-                theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+                theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
               },
               inquirerContext
             ).catch(() => {});
@@ -552,11 +617,11 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
         } else if (permanentFailedKeys.size > 0 && failedKeys.size === 0) {
           // 全部是 permanent 失败，无重试价值
           printResultTable(isUninstall ? "卸载结果" : "安装结果", resultRows);
-          console.log(chalk.yellow(TERM_GUTTER + `⚠ ${permanentFailedKeys.size} 项操作不可执行（不支持或非本工具安装），已跳过\n`));
+          console.log(chalk.yellow(TERM_GUTTER + `⚠ ${permanentFailedKeys.size} 项操作未完成，已跳过，请检查说明\n`));
           await input(
             {
               message: "按任意键返回主菜单...",
-              theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+              theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
             },
             inquirerContext
           ).catch(() => {});
@@ -567,7 +632,7 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
         await input(
           {
             message: "按任意键返回主菜单...",
-            theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+            theme: { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } },
           },
           inquirerContext
         ).catch(() => {});
@@ -577,57 +642,172 @@ async function runFlowWithSource(isUninstall, holdSource, embedded) {
   }
 }
 
-export async function runOperation(action) {
-  if (!["install", "uninstall"].includes(action)) throw new TypeError(`Unknown skill operation: ${action}`);
-  await afterPromptFlush();
-  const result = await runFlow(action === "uninstall", true);
-  await afterPromptFlush();
-  return result;
+async function selectKind(message) {
+  return pick({
+    message,
+    choices: withNavChoices([
+      { name: "技能", value: "skill" },
+      { name: "插件", value: "plugin" },
+    ], "↩ 返回主菜单"),
+  });
 }
 
-async function runInteractivePluginInstall() {
-  printSectionTitle("━━━ 选择插件宿主 ━━━");
+async function runInteractivePluginInstall(session) {
+  await afterPromptFlush();
+  publicSourceLabel = "";
+  printBanner();
   const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
   if (!tools.length) {
-    console.log(chalk.yellow(TERM_GUTTER + "请先安装 Codex 或 Claude Code CLI。"));
+    console.log(chalk.yellow(TERM_GUTTER + "没有可安装插件的工具，请先安装 Cursor、Codex、Claude Code、Hermes Agent 或 Pi。"));
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
-  const host = await Select({
-    message: "选择插件宿主:",
-    choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
-  }, inquirerContext);
-  if (host === "__back__") return "back";
-  if (host === "__exit__") return "exit";
-  const { name: hostName } = tools.find(tool => tool.id === host);
-  const sourceDir = (await input({ message: "本地插件目录（留空使用 Helper 受管插件）:" }, inquirerContext)).trim();
+  const toolById = new Map(tools.map(tool => [tool.id, tool]));
+  const theme = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
   try {
-    const local = sourceDir ? readLocalPluginSource(sourceDir, host) : null;
-    const plugins = local ? local.plugins : listManagedPlugins(host);
-    if (!plugins.length) throw new Error("当前来源没有可安装的插件。");
+    const source = await ensureSource(session);
+    if (!source) {
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      return "back";
+    }
+    if (session.usedFallback) {
+      console.log(chalk.yellow(TERM_GUTTER + `⚠ 使用旧缓存 ${source.tag}（未确认最新）`));
+    }
+    const catalog = listAllManagedPlugins(source.root);
+    if (!catalog.length) throw new Error("当前没有可安装的插件。");
+
+    let stage = 1;
+    let selected = [];
+    let hostIds = [];
+    let combos = [];
+    let skipped = [];
     while (true) {
-      const selected = await Select({
-        message: `选择 ${hostName} 插件:`,
-        choices: withNavChoices(plugins.map(plugin => ({
-          name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
-          value: plugin.name,
-        })), "↩ 返回主菜单"),
-      }, inquirerContext);
-      if (selected === "__back__") return "back";
-      if (selected === "__exit__") return "exit";
-      const confirmation = await Select({
-        message: `安装 ${selected} 到 ${hostName}${local ? `（本地 ${local.directory}）` : "（Helper 受管）"}？`,
+      if (stage === 1) {
+        let selectedNames = [];
+        while (!selectedNames.length) {
+          const answer = await runCheckbox({
+            message: "选择插件:",
+            choices: withNavChoices(catalog.map(plugin => ({
+              name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+              value: plugin.name,
+              checked: true,
+            })), "↩ 返回主菜单", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") return "back";
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          selectedNames = result;
+        }
+        selected = selectedNames.map(name => catalog.find(plugin => plugin.name === name));
+        stage = 2;
+        continue;
+      }
+
+      if (stage === 2) {
+        let nextHostIds = [];
+        while (!nextHostIds.length) {
+          const answer = await runCheckbox({
+            message: "选择工具:",
+            choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 上一步", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") { stage = 1; break; }
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          nextHostIds = result;
+        }
+        if (stage === 1) continue;
+        hostIds = nextHostIds;
+        stage = 3;
+        continue;
+      }
+
+      combos = [];
+      skipped = [];
+      for (const hostId of hostIds) {
+        for (const plugin of selected) {
+          if (plugin.hosts.includes(hostId)) combos.push({ hostId, name: plugin.name });
+          else skipped.push({ hostId, name: plugin.name, reason: "该工具清单中没有此插件" });
+        }
+      }
+
+      if (!combos.length) {
+        for (const item of skipped) {
+          console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
+        }
+        console.log(chalk.yellow(TERM_GUTTER + "所选插件和工具没有可安装的组合，请重新选择。\n"));
+        stage = 2;
+        continue;
+      }
+
+      await afterPromptFlush();
+      printBanner();
+      printSectionTitle("━━━ 安装预览 ━━━");
+      printTable("待安装内容", ["工具", "插件", "状态"], [
+        ...combos.map(item => [toolById.get(item.hostId).name, item.name, "待安装"]),
+        ...skipped.map(item => [toolById.get(item.hostId).name, item.name, "不支持"]),
+      ]);
+      const confirmation = await pick({
+        message: "确认安装？",
         choices: [
-          { name: "返回上一步", value: "back" },
-          { name: "确认安装", value: "confirm" },
-          { name: "退出", value: "exit" },
+          { name: "✓ 确认安装", value: "confirm" },
+          { name: "↩ 上一步", value: "back" },
+          { name: "✕ 退出", value: "exit" },
         ],
-      }, inquirerContext);
-      if (confirmation === "back") continue;
+      });
+      if (confirmation === "back") { stage = 2; continue; }
       if (confirmation !== "confirm") return "exit";
-      printPluginResult(await installPlugin(selected, local?.directory, host), host);
       break;
     }
+
+    await afterPromptFlush();
+    printBanner();
+    printSectionTitle("━━━ 执行中 ━━━");
+    const rows = [];
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < combos.length; i += 1) {
+      const { hostId, name } = combos[i];
+      const toolName = toolById.get(hostId).name;
+      showProgress(`正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`);
+      try {
+        const { version } = await installPlugin(name, undefined, hostId, source.root);
+        ok += 1;
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: "插件", ok: true, hostId });
+      } catch (error) {
+        failed += 1;
+        rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: chalk.red("失败"), mode: "插件", reason: error.message, ok: false, hostId });
+      }
+    }
+    for (const item of skipped) {
+      rows.push({
+        key: `${item.hostId}::${item.name}`, toolName: toolById.get(item.hostId).name,
+        skillName: item.name, status: chalk.yellow("不支持"), mode: "插件", reason: item.reason,
+      });
+    }
+    clearProgress();
+    console.log();
+    printResultTable("安装结果", rows);
+    for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
+      console.log(pluginHostNote(hostId));
+    }
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能与插件源 ${source.tag}${session.usedFallback ? " · 旧缓存，未确认最新" : ""}`));
+    if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
+    else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
+    else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
   } catch (error) {
     if (error?.name === "ExitPromptError") return "exit";
     console.log(chalk.red(TERM_GUTTER + error.message));
@@ -636,53 +816,311 @@ async function runInteractivePluginInstall() {
   return "back";
 }
 
-// ── Main ──
-export async function runInteractive() {
-  let exit = false;
+async function runInteractivePluginUninstall() {
+  await afterPromptFlush();
+  publicSourceLabel = "";
+  printBanner();
+  const hosts = detectInstalledTools()
+    .filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id))
+    .map(tool => ({ ...tool, plugins: listInstalledPlugins(tool.id) }))
+    .filter(tool => tool.plugins.length > 0);
+  if (!hosts.length) {
+    console.log(chalk.yellow(TERM_GUTTER + "没有可卸载的插件。"));
+    await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+    return "back";
+  }
+  const theme = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 
-  while (!exit) {
-    printBanner();
+  let stage = 1;
+  let hostIds = [];
+  let selected = new Map();
+  let total = 0;
+  while (true) {
+    if (stage === 1) {
+      let nextHostIds = [];
+      while (!nextHostIds.length) {
+        const answer = await runCheckbox({
+          message: "选择工具:",
+          choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步"),
+          loop: false,
+          theme,
+        });
+        const result = parseCheckboxResult(answer);
+        if (result === "back") return "back";
+        if (result === "exit") return "exit";
+        if (!result.length) {
+          console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
+          await new Promise(r => setTimeout(r, 1200));
+          continue;
+        }
+        nextHostIds = result;
+      }
+      hostIds = nextHostIds;
+      selected = new Map();
+      stage = 2;
+      continue;
+    }
 
-    const action = await Select(
-      {
-        message: "选择操作:",
-        choices: [
-          { name: padChoice(" 安装 / 更新", 20), value: "install" },
-          { name: padChoice(" 卸载 Skill", 20), value: "uninstall" },
-          { name: padChoice(" 退出", 20), value: "exit" },
-        ],
-        theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
-      },
-      inquirerContext
-    ).catch(() => "exit");
-
-    if (action === "exit") {
-      break;
+    if (stage === 2) {
+      let backed = false;
+      for (const hostId of hostIds) {
+        const host = hosts.find(tool => tool.id === hostId);
+        let names = null;
+        while (names === null || names.length === 0) {
+          const answer = await runCheckbox({
+            message: `选择 ${host.name} 的插件:`,
+            choices: withNavChoices(host.plugins.map(plugin => ({
+              name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
+              value: plugin.name,
+              checked: selected.get(hostId)?.includes(plugin.name) ?? false,
+            })), "↩ 上一步", "✕ 退出", "下一步"),
+            loop: false,
+            theme,
+          });
+          const result = parseCheckboxResult(answer);
+          if (result === "back") { stage = 1; backed = true; break; }
+          if (result === "exit") return "exit";
+          if (!result.length) {
+            console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件"));
+            await new Promise(r => setTimeout(r, 1200));
+            continue;
+          }
+          names = result;
+        }
+        if (backed) break;
+        selected.set(hostId, names);
+      }
+      if (backed) continue;
+      total = [...selected.values()].reduce((sum, names) => sum + names.length, 0);
+      stage = 3;
+      continue;
     }
 
     await afterPromptFlush();
-    let result;
-    if (action === "install") {
-      const kind = await Select({
-        message: "选择要安装的内容类型:",
-        choices: withNavChoices([
-          { name: "Skill", value: "skill" },
-          { name: "插件", value: "plugin" },
-        ], "↩ 返回主菜单"),
-      }, inquirerContext);
+    printBanner();
+    printSectionTitle("━━━ 卸载预览 ━━━");
+    printTable("待卸载内容", ["工具", "插件"], [...selected].flatMap(([hostId, names]) => {
+      const host = hosts.find(tool => tool.id === hostId);
+      return names.map(name => [host.name, name]);
+    }));
+    const confirmation = await pick({
+      message: `确认卸载这 ${total} 个插件？`,
+      choices: [
+        { name: "✓ 确认卸载", value: "confirm" },
+        { name: "↩ 上一步", value: "back" },
+        { name: "✕ 退出", value: "exit" },
+      ],
+    });
+    if (confirmation === "back") { stage = 2; continue; }
+    if (confirmation !== "confirm") return "exit";
+    break;
+  }
+
+  await afterPromptFlush();
+  printBanner();
+  printSectionTitle("━━━ 执行中 ━━━");
+  const rows = [];
+  let ok = 0;
+  let failed = 0;
+  let current = 0;
+  for (const [hostId, names] of selected) {
+    const host = hosts.find(tool => tool.id === hostId);
+    for (const name of names) {
+      current += 1;
+      showProgress(`正在卸载 ${current}/${total}：${name} → ${host.name}`);
+      try {
+        await uninstallPlugin(name, hostId);
+        ok += 1;
+        rows.push({ toolName: host.name, skillName: name, status: chalk.green("已卸载"), mode: "插件" });
+      } catch (error) {
+        failed += 1;
+        rows.push({ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件", reason: error.message });
+        clearProgress();
+        console.log(chalk.red(TERM_GUTTER + error.message));
+      }
+    }
+  }
+  clearProgress();
+  console.log();
+  printResultTable("卸载结果", rows);
+  if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项卸载失败，请手动检查。\n`));
+  else console.log(chalk.green(TERM_GUTTER + `✅ 已卸载 ${ok} 项\n`));
+  await input({ message: "按任意键退出..." }, inquirerContext).catch(() => {});
+  return "exit";
+}
+
+// ── Main ──
+function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError }) {
+  const { source } = inventory;
+  let line;
+  let color = chalk.gray;
+  if (remoteError) {
+    const reason = remoteError.replace(/^无法获取技能与插件源：/, "").replace(/。$/, "");
+    line = `⚠ 无法检查更新：${reason}，安装时会重试`;
+    color = chalk.yellow;
+  } else if (!source) {
+    line = `可安装版本 ${remoteTag}（本地无快照）`;
+  } else if (remoteTag !== source.tag) {
+    line = `技能与插件 ${remoteTag}（本地 ${source.tag}，安装时更新）`;
+    color = chalk.yellow;
+  } else {
+    line = `技能与插件 ${source.tag}（已是最新）`;
+    color = chalk.green;
+  }
+  if (inventoryError) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装内容扫描失败：${inventoryError}`));
+    console.log(color(TERM_GUTTER + line) + "\n");
+    return;
+  }
+  console.log(color(TERM_GUTTER + line) + "\n");
+}
+
+async function loadStartupStatus() {
+  console.log(chalk.gray(TERM_GUTTER + "正在读取已安装内容…"));
+  let inventory;
+  let inventoryError = null;
+  try {
+    inventory = collectInstalled();
+  } catch (error) {
+    inventoryError = error.message;
+    inventory = { rows: [], source: null };
+  }
+  console.log(chalk.gray(TERM_GUTTER + "正在检查技能与插件更新…"));
+  try {
+    return { inventory, inventoryError, remoteTag: await remotePublicTag() };
+  } catch (error) {
+    return { inventory, inventoryError, remoteError: error.message };
+  }
+}
+
+function needsPull({ inventory, remoteTag }) {
+  return !inventory.source || !remoteTag || remoteTag !== inventory.source.tag;
+}
+
+async function useCachedSource(session, failure) {
+  console.log(chalk.yellow(TERM_GUTTER + `拉取失败：${failure}`));
+  const cached = await acquireCachedSource();
+  if (!cached) {
+    console.log(chalk.red(TERM_GUTTER + "本地没有可用缓存，无法继续安装。"));
+    return null;
+  }
+  const choice = await pick({
+    message: `是否使用本地缓存 ${cached.tag} 继续安装？`,
+    choices: [
+      { name: "返回，不安装", value: "back" },
+      { name: "使用此缓存（未确认是最新版本）", value: "cache" },
+    ],
+  });
+  if (choice !== "cache") {
+    try { await cached.release?.(); } catch { /* ignore release failures */ }
+    return null;
+  }
+  session.source = cached;
+  session.pullRequired = false;
+  session.usedFallback = true;
+  return cached;
+}
+
+async function ensureSource(session) {
+  if (session.source) return session.source;
+  if (!session.pullRequired) {
+    const cached = await acquireCachedSource();
+    if (cached) {
+      session.source = cached;
+      return cached;
+    }
+    session.pullRequired = true;
+  }
+  // Git 缺失时启动检查已经失败，这里不再重复一次注定失败的拉取。
+  if (session.remoteError?.startsWith("找不到 Git")) {
+    return useCachedSource(session, session.remoteError);
+  }
+  // 进度只占一行，拉取结束立即擦掉；获取结果由下一屏的「技能 x.y.z」标题表达。
+  showProgress("正在获取技能与插件…");
+  try {
+    const source = await refreshPublicSource();
+    clearProgress();
+    session.source = source;
+    session.pullRequired = false;
+    return source;
+  } catch (error) {
+    clearProgress();
+    return useCachedSource(session, error.message);
+  }
+}
+
+export async function runInteractive() {
+  const startup = await loadStartupStatus();
+  printBanner();
+  printStartupStatus(startup);
+  const session = {
+    pullRequired: needsPull(startup),
+    source: null,
+    remoteError: startup.remoteError,
+    usedFallback: false,
+  };
+  let inventoryCache = startup.inventory;
+  let firstMenu = true;
+  let exit = false;
+
+  try {
+    while (!exit) {
+      if (!firstMenu) {
+        publicSourceLabel = "";
+        printBanner();
+      }
+      firstMenu = false;
+
+      const action = await pick(
+        {
+          message: "选择操作:",
+          choices: [
+            { name: padChoice("安装 / 更新", 20), value: "install" },
+            { name: padChoice("卸载", 20), value: "uninstall" },
+            { name: padChoice("已安装", 20), value: "list" },
+            { name: padChoice("退出", 20), value: "exit" },
+          ],
+        }
+      ).catch(() => "exit");
+
+      if (action === "exit") {
+        break;
+      }
+
+      if (action === "list") {
+        await afterPromptFlush();
+        printBanner();
+        printSectionTitle("━━━ 已安装内容 ━━━");
+        printInstalledContent(inventoryCache);
+        await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+        continue;
+      }
+
+      await afterPromptFlush();
+      let result;
+      const kind = await selectKind(action === "install" ? "选择要安装的内容类型:" : "选择要卸载的内容类型:");
       if (kind === "__back__") continue;
       if (kind === "__exit__") break;
       await afterPromptFlush();
-      result = kind === "plugin" ? await runInteractivePluginInstall() : await runFlow(false);
-    } else {
-      result = await runFlow(true);
-    }
+      if (action === "install") {
+        result = kind === "plugin" ? await runInteractivePluginInstall(session) : await runFlow(false, session);
+      } else {
+        result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true, session);
+      }
 
-    if (result === "exit" || result === "abort") {
-      exit = true;
+      try {
+        inventoryCache = collectInstalled();
+      } catch (error) {
+        console.log(chalk.yellow(TERM_GUTTER + `重新扫描已安装内容失败：${error.message}`));
+      }
+      if (result === "exit" || result === "abort") {
+        exit = true;
+      }
+      await afterPromptFlush();
+      // "back" or "done" → loop continues, show main menu again
     }
-    await afterPromptFlush();
-    // "back" or "done" → loop continues, show main menu again
+  } finally {
+    try { await session.source?.release?.(); } catch { /* ignore release failures */ }
   }
 
   console.log(chalk.gray("\n" + TERM_GUTTER + "👋 Bye!\n"));

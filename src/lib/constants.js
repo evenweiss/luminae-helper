@@ -47,25 +47,17 @@ export const TOOLS = [
     skillDir: () => join(homedir(), ".opencode", "skills"),
     installHint: "npm install -g opencode-ai",
   },
+  {
+    id: "pi",
+    name: "Pi",
+    command: "pi",
+    commandDir: null,
+    skillDir: () => join(homedir(), ".pi", "agent", "skills"),
+    installHint: "npm install -g --registry=https://registry.npmjs.org @earendil-works/pi-coding-agent",
+  },
 ];
 
 // ── Skill auto-discovery ──
-
-/** ...same as before... */
-function getPackageDir() {
-  if (globalThis.__LUMINAE_PACKAGE_ROOT__) {
-    return globalThis.__LUMINAE_PACKAGE_ROOT__;
-  }
-
-  const selfDir = import.meta.dirname;
-  if (selfDir.endsWith("/src/lib") || selfDir.endsWith("\\src\\lib")) {
-    return join(selfDir, "..", "..");
-  }
-  if (selfDir.endsWith("/src") || selfDir.endsWith("\\src")) {
-    return join(selfDir, "..");
-  }
-  return selfDir;
-}
 
 function parseSkillMeta(skillId, content) {
   let name = null;
@@ -113,7 +105,7 @@ function generateInstallTargets(skillId) {
   }));
 }
 
-export function discoverSkills(packageDir = getPackageDir()) {
+export function discoverSkills(packageDir) {
   const skills = [];
   const seenIds = new Set();
 
@@ -152,7 +144,7 @@ export function discoverSkills(packageDir = getPackageDir()) {
   return skills;
 }
 
-export const SKILLS = discoverSkills();
+export const SKILLS = [];
 
 export function setSkillsSource(root) {
   SKILLS.splice(0, SKILLS.length, ...discoverSkills(root));
