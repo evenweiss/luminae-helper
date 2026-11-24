@@ -4,7 +4,7 @@ import { select as Select, input, Separator } from "@inquirer/prompts";
 import wcswidth from "wcwidth";
 import checkboxWithActionRows from "./checkbox-with-action-rows.js";
 import { SKILLS, TOOLS, detectInstalledTools, setSkillsSource, useInstalledSkills } from "./constants.js";
-import { refreshPublicSource, acquireCachedSource } from "./public-source.js";
+import { refreshPublicSource, acquireCachedSource, remotePublicTag } from "./public-source.js";
 import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 import { collectInstalled } from "./inventory.js";
 import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugin, uninstallPlugin, pluginHostNote } from "./codex-plugin.js";
@@ -125,8 +125,8 @@ function printResultTable(title, rows) {
       : [row.toolName, row.skillName, row.status, row.mode]));
 }
 
-export function printInstalledContent() {
-  const { rows, source } = collectInstalled();
+export function printInstalledContent(content = collectInstalled()) {
+  const { rows, source } = content;
   if (rows.length === 0) {
     console.log(TERM_GUTTER + "没有检测到 Helper 管理的技能或插件。");
   } else {
@@ -828,11 +828,47 @@ async function runInteractivePluginUninstall() {
 }
 
 // ── Main ──
+function printStartupStatus({ inventory, remoteTag, remoteError }) {
+  const { rows, source } = inventory;
+  const skills = rows.filter(row => row.type === "技能").length;
+  const plugins = rows.filter(row => row.type === "插件").length;
+  if (source) console.log(chalk.gray(TERM_GUTTER + `技能快照 ${source.tag} · ${source.commit.slice(0, 7)}`));
+  else console.log(chalk.gray(TERM_GUTTER + "技能快照：无（首次安装时下载）"));
+  if (remoteTag) {
+    if (!source) console.log(chalk.gray(TERM_GUTTER + `技能仓库最新 ${remoteTag}（本地无快照）`));
+    else if (remoteTag.replace(/^v/, "") !== source.tag.replace(/^v/, "")) {
+      console.log(chalk.yellow(TERM_GUTTER + `技能仓库最新 ${remoteTag}（本地 ${source.tag}，安装时更新）`));
+    } else console.log(chalk.green(TERM_GUTTER + `技能仓库已是最新（${remoteTag}）`));
+  } else {
+    console.log(chalk.gray(TERM_GUTTER + `无法检查技能仓库最新版本：${remoteError}`));
+  }
+  const parts = [];
+  if (skills) parts.push(`技能 ${skills}`);
+  if (plugins) parts.push(`插件 ${plugins}`);
+  console.log(chalk.gray(TERM_GUTTER + `已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`));
+}
+
+async function loadStartupStatus() {
+  const inventory = collectInstalled();
+  console.log(chalk.gray(TERM_GUTTER + "正在检查技能仓库最新版本…"));
+  try {
+    return { inventory, remoteTag: await remotePublicTag() };
+  } catch (error) {
+    return { inventory, remoteError: error.message };
+  }
+}
+
 export async function runInteractive() {
+  printBanner();
+  const startup = await loadStartupStatus();
+  printStartupStatus(startup);
+  let inventoryCache = startup.inventory;
+  let firstMenu = true;
   let exit = false;
 
   while (!exit) {
-    printBanner();
+    if (!firstMenu) printBanner();
+    firstMenu = false;
 
     const action = await pick(
       {
@@ -855,7 +891,7 @@ export async function runInteractive() {
       await afterPromptFlush();
       printBanner();
       printSectionTitle("━━━ 已安装内容 ━━━");
-      printInstalledContent();
+      printInstalledContent(inventoryCache ??= collectInstalled());
       await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
       continue;
     }
@@ -872,6 +908,7 @@ export async function runInteractive() {
       result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true);
     }
 
+    inventoryCache = null;
     if (result === "exit" || result === "abort") {
       exit = true;
     }

@@ -13,6 +13,7 @@
 
 ### Added
 
+- 启动时显示概览：本地技能快照、远端最新正式 Tag（`git ls-remote` 只查不拉）、已安装数量；「已安装」页复用启动扫描结果，安装/卸载后失效重扫。
 - `skill uninstall` 与批量操作：`skill install` / `skill uninstall` 支持多个技能 ID 和 `--all`；卸载完全离线，只删受管技能。
 - 新增「查看已安装」：主菜单入口与 `luminae-helper list`，按宿主列出受管技能/插件与插件版本，并显示来源快照。
 - 插件安装新增 Cursor、Hermes Agent、Pi 三个宿主；卸载入口按「技能 / 插件」区分，五个插件宿主都支持卸载 Helper 管理的插件。

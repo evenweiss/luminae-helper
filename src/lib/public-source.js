@@ -16,10 +16,10 @@ export function publicSourceOptions() {
 function optionsWithDefaults(options) {
   return { ...publicSourceOptions(), ...options };
 }
-async function git(args, cwd) {
+async function git(args, cwd, timeout = 30000) {
   try {
     const { stdout } = await exec("git", args, {
-      cwd, encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024,
+      cwd, encoding: "utf8", timeout, maxBuffer: 8 * 1024 * 1024,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C" },
     });
     return stdout.trim();
@@ -34,7 +34,7 @@ function sourceError(error) {
   if (error?.message?.startsWith("找不到 Git")) return error;
   const text = String(error?.stderr || error?.stdout || error?.message || "");
   if (error?.killed || ["SIGTERM", "SIGKILL", "ETIMEDOUT"].includes(error?.signal) || /timed out/i.test(text)) {
-    return new Error("无法获取技能仓库：网络或代理不可用（拉取超时）。");
+    return new Error("无法获取技能仓库：网络或代理不可用（请求超时）。");
   }
   if (!/could not resolve|unable to access|connection (timed out|refused|reset)|network is unreachable|failed to connect|ssl|tls|early eof|rpc failed|the requested url returned/i.test(text)) return error;
   const reason = text.split("\n").map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 120) ?? "";
@@ -89,6 +89,24 @@ export async function acquireCachedSource(options = {}) {
     cleanupCache(resolved.cacheDir);
     return held;
   });
+}
+
+/**
+ * 只读远端引用，不 clone/fetch，也不写缓存；用于启动时检查最新正式 Tag。
+ */
+export async function remotePublicTag(options = {}) {
+  const { repo } = optionsWithDefaults(options);
+  try {
+    const output = await git(["ls-remote", "--tags", "--refs", repo], undefined, 8000);
+    const tags = output.split("\n")
+      .map(line => line.split(/\s+/)[1]?.replace(/^refs\/tags\//, ""))
+      .filter(Boolean);
+    const tag = stableTags(tags.join("\n"))[0];
+    if (!tag) throw new Error("技能仓库没有正式版本 Tag");
+    return tag;
+  } catch (error) {
+    throw sourceError(error);
+  }
 }
 
 export async function latestPublicTag(options = {}) {

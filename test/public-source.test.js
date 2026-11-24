@@ -61,6 +61,11 @@ describe("public skill source", () => {
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toContain("first");
     expect(source.readCachedSource(f.options).commit).toBe(second.commit);
   });
+  it("checks the remote latest tag without creating any cache", async () => {
+    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
+    expect(await source.remotePublicTag(f.options)).toBe("0.1.0");
+    expect(existsSync(f.options.cacheDir)).toBe(false);
+  });
   it("reports the latest tag without creating a snapshot", async () => {
     const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
     expect(await source.latestPublicTag(f.options)).toBe("0.1.0");

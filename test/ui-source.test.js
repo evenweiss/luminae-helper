@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 const prompts = vi.hoisted(() => ({ select: vi.fn(), input: vi.fn(), checkbox: vi.fn() }));
 const plugins = vi.hoisted(() => ({ PLUGIN_HOSTS: ["codex", "claude-code"], listAllManagedPlugins: vi.fn(), listInstalledPlugins: vi.fn(), installPlugin: vi.fn(), uninstallPlugin: vi.fn(), pluginHostNote: vi.fn(() => ""), printPluginResult: vi.fn() }));
 vi.mock("../src/lib/codex-plugin.js", () => plugins);
-const source = vi.hoisted(() => ({ refreshPublicSource: vi.fn(), acquireCachedSource: vi.fn(), publicSourceOptions: () => ({}) }));
+const source = vi.hoisted(() => ({ refreshPublicSource: vi.fn(), acquireCachedSource: vi.fn(), remotePublicTag: vi.fn(), publicSourceOptions: () => ({}) }));
 const inventory = vi.hoisted(() => ({ collectInstalled: vi.fn() }));
 vi.mock("@inquirer/prompts", () => ({ select: prompts.select, input: prompts.input, Separator: class {} }));
 vi.mock("../src/lib/checkbox-with-action-rows.js", () => ({ default: prompts.checkbox }));
@@ -24,6 +24,8 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "clear").mockImplementation(() => {});
   prompts.input.mockResolvedValue(""); prompts.checkbox.mockResolvedValue(["__back__"]);
+  inventory.collectInstalled.mockReturnValue({ rows: [], source: null });
+  source.remotePublicTag.mockResolvedValue("0.1.0");
   SKILLS.splice(0);
 });
 it("loads runtime skills before offering the install list", async () => {
@@ -33,11 +35,29 @@ it("loads runtime skills before offering the install list", async () => {
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
 });
 
-it("queries installed content when entering the view, not when opening the menu", async () => {
-  inventory.collectInstalled.mockReturnValue({ rows: [], source: null });
+it("reuses the startup inventory when entering the installed view", async () => {
   prompts.select.mockResolvedValueOnce("list").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
   await runInteractive();
+  expect(inventory.collectInstalled).toHaveBeenCalledTimes(1);
+});
+
+it("rescans installed content after an install", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
+  plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
+  plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
+  prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
+  await runInteractive();
   expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
+});
+
+it("shows a startup check failure without blocking the menu", async () => {
+  source.remotePublicTag.mockRejectedValue(new Error("网络不可用"));
+  prompts.select.mockResolvedValueOnce("exit");
+  await runInteractive();
+  const output = console.log.mock.calls.map(([line]) => String(line)).join("\n");
+  expect(output).toContain("无法检查技能仓库最新版本：网络不可用");
 });
 
 it("starts the uninstall skill list with nothing selected", async () => {
