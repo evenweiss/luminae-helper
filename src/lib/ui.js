@@ -191,7 +191,7 @@ async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步"
     printBanner();
 
     const skillChoices = SKILLS.map(s => ({
-      name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
+      name: s.name + (s.legacyCommand ? "（旧命令）" : "") + " - " + s.description,
       value: s.id,
       checked: defaultChecked,
     }));
