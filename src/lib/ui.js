@@ -338,6 +338,8 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   const sids = asIdArray(skillIds);
   const tids = asIdArray(toolIds);
   await afterPromptFlush();
+  // 卸载结果不再描述“已安装内容”这个输入来源。
+  if (isUninstall) publicSourceLabel = "";
   printBanner();
   console.log();
   printSectionTitle("━━━ 执行中 ━━━");
@@ -1035,7 +1037,10 @@ export async function runInteractive() {
 
   try {
     while (!exit) {
-      if (!firstMenu) printBanner();
+      if (!firstMenu) {
+        publicSourceLabel = "";
+        printBanner();
+      }
       firstMenu = false;
 
       const action = await pick(

@@ -119,6 +119,7 @@ it("labels uninstall combinations missing on a tool as 未安装", async () => {
   const output = console.log.mock.calls.flat().join("\n");
   expect(output).toContain("待卸载");
   expect(output).toContain("未安装");
+  expect(output.indexOf("已安装的受管内容（离线卸载）")).toBeLessThan(output.indexOf("执行中"));
   expect(output).not.toContain("不支持");
   expect(output).not.toContain("不适用");
 });
