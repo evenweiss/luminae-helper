@@ -6,9 +6,11 @@ const prompts = vi.hoisted(() => ({ select: vi.fn(), input: vi.fn(), checkbox: v
 const plugins = vi.hoisted(() => ({ PLUGIN_HOSTS: ["codex", "claude-code"], listManagedPlugins: vi.fn(), listInstalledPlugins: vi.fn(), readLocalPluginSource: vi.fn(), installPlugin: vi.fn(), uninstallPlugin: vi.fn(), pluginHostNote: vi.fn(() => ""), printPluginResult: vi.fn() }));
 vi.mock("../src/lib/codex-plugin.js", () => plugins);
 const source = vi.hoisted(() => ({ refreshPublicSource: vi.fn(), acquireCachedSource: vi.fn(), publicSourceOptions: () => ({}) }));
+const inventory = vi.hoisted(() => ({ collectInstalled: vi.fn() }));
 vi.mock("@inquirer/prompts", () => ({ select: prompts.select, input: prompts.input, Separator: class {} }));
 vi.mock("../src/lib/checkbox-with-action-rows.js", () => ({ default: prompts.checkbox }));
 vi.mock("../src/lib/public-source.js", () => source);
+vi.mock("../src/lib/inventory.js", () => inventory);
 vi.mock("../src/utils/platform.js", () => ({ commandExists: () => true }));
 const root = mkdtempSync(join(tmpdir(), "ui-source-"));
 process.env.HOME = join(root, "home");
@@ -29,6 +31,13 @@ it("loads runtime skills before offering the install list", async () => {
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
+});
+
+it("queries installed content when entering the view, not when opening the menu", async () => {
+  inventory.collectInstalled.mockReturnValue({ rows: [], source: null });
+  prompts.select.mockResolvedValueOnce("list").mockResolvedValueOnce("list").mockResolvedValueOnce("exit");
+  await runInteractive();
+  expect(inventory.collectInstalled).toHaveBeenCalledTimes(2);
 });
 
 it("starts the uninstall skill list with nothing selected", async () => {
