@@ -180,7 +180,7 @@ it("does not repoint an existing Claude Code marketplace", async () => {
 
 it("rejects duplicate or unsupported tool options before invoking any host", async () => {
   await expect(runPluginCommand(["install", "workflow", "--tool", "codex", "--tool", "claude-code"])).rejects.toThrow("用法");
-  await expect(runPluginCommand(["install", "workflow", "--tool", "unknown"])).rejects.toThrow("不支持插件宿主");
+  await expect(runPluginCommand(["install", "workflow", "--tool", "unknown"])).rejects.toThrow("该工具不支持插件");
   expect(native.run).not.toHaveBeenCalled();
 });
 
@@ -339,6 +339,6 @@ it("unregisters and deletes a Pi plugin package", async () => {
 });
 
 it("rejects an unsupported uninstall host before touching files", async () => {
-  await expect(uninstallPlugin("workflow", "opencode")).rejects.toThrow("不支持插件宿主");
+  await expect(uninstallPlugin("workflow", "opencode")).rejects.toThrow("该工具不支持插件");
   expect(native.run).not.toHaveBeenCalled();
 });

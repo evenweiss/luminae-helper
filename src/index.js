@@ -3,10 +3,10 @@ const usage = `用法：luminae-helper [命令]
   （无命令）                    交互式安装 / 更新 / 卸载
   list                          查看已安装的技能与插件
   outdated                      检查工具、技能与插件更新
-  skill install <技能ID...|--all> --tool <宿主ID>
-  skill uninstall <技能ID...|--all> --tool <宿主ID>
+  skill install <技能ID...|--all> --tool <工具ID>
+  skill uninstall <技能ID...|--all> --tool <工具ID>
   skill --help
-  plugin install|uninstall <插件名> --tool <插件宿主>
+  plugin install|uninstall <插件名> --tool <工具>
   plugin --help
   --version, -v
   --help, -h`;

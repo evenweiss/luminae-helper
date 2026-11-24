@@ -33,6 +33,9 @@ it("loads runtime skills before offering the install list", async () => {
   prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("skill").mockResolvedValueOnce("exit");
   await runInteractive();
   expect(SKILLS.map(s => s.id)).toEqual(["runtime"]);
+  const selection = prompts.checkbox.mock.calls[0][0];
+  expect(selection.requireActionRow).toBe(true);
+  expect(selection.choices.some(choice => choice.value === "__next__")).toBe(true);
   expect(console.log.mock.calls.flat().join("\n")).toMatch(/已获取技能与插件 0\.3\.0/);
 });
 
@@ -194,7 +197,11 @@ it("offers the aggregated plugin catalog before host selection", async () => {
   const selection = prompts.checkbox.mock.calls.find(([config]) => config.message === "选择插件:")[0];
   expect(selection.choices.filter(choice => choice.value && !choice.value.startsWith("__"))
     .map(choice => choice.value)).toEqual(["ai-development-workflow"]);
-  expect(prompts.checkbox.mock.calls[1][0].message).toBe("选择宿主:");
+  expect(selection.requireActionRow).toBe(true);
+  expect(selection.choices.some(choice => choice.value === "__next__")).toBe(true);
+  expect(prompts.checkbox.mock.calls[1][0].message).toBe("选择工具:");
+  expect(prompts.checkbox.mock.calls[1][0].requireActionRow).toBe(true);
+  expect(prompts.checkbox.mock.calls[1][0].choices.some(choice => choice.value === "__next__")).toBe(true);
   expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("ai-development-workflow", undefined, "codex", snapshot.root);
   expect(snapshot.release).toHaveBeenCalled();
 });
@@ -245,7 +252,7 @@ it("installs only supported combinations and reports skipped ones with reasons",
   ]);
   const output = console.log.mock.calls.map(([line]) => String(line)).join("\n");
   expect(output).toContain("不支持");
-  expect(output).toContain("该宿主清单中没有此插件");
+  expect(output).toContain("该工具清单中没有此插件");
   expect(output).toContain("2 项不支持已跳过");
 });
 

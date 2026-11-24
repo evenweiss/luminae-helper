@@ -3,8 +3,8 @@ import { installSkillToTool, uninstallSkillFromTool } from "./installer.js";
 import { refreshPublicSource } from "./public-source.js";
 import { commandExists } from "../utils/platform.js";
 
-const usage = `用法：luminae-helper skill install <技能ID...|--all> --tool <宿主ID>
-      luminae-helper skill uninstall <技能ID...|--all> --tool <宿主ID>`;
+const usage = `用法：luminae-helper skill install <技能ID...|--all> --tool <工具ID>
+      luminae-helper skill uninstall <技能ID...|--all> --tool <工具ID>`;
 const toolIds = TOOLS.map(tool => tool.id).join("、");
 
 function parse(args) {
@@ -72,13 +72,13 @@ function uninstall(names, all, tool) {
 export async function runSkillCommand(args) {
   const help = ["--help", "-h"];
   if (help.includes(args[0]) || (["install", "uninstall"].includes(args[0]) && help.includes(args[1]))) {
-    console.log(`${usage}\n可用宿主：${toolIds}\n--all：安装全部技能，或卸载该宿主全部受管技能`);
+    console.log(`${usage}\n可用工具：${toolIds}\n--all：安装全部技能，或卸载该工具全部受管技能`);
     return;
   }
 
   const { action, names, all, toolId } = parse(args);
   const tool = TOOLS.find(tool => tool.id === toolId);
-  if (!tool) throw new Error(`不支持宿主 ${toolId}。可用宿主：${toolIds}`);
+  if (!tool) throw new Error(`不支持工具 ${toolId}。可用工具：${toolIds}`);
 
   if (action === "install") {
     if (!commandExists(tool.command)) throw new Error(`未检测到 ${tool.name}。请先安装：${tool.installHint}`);

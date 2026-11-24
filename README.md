@@ -2,7 +2,7 @@
 
 AI 编程工具的技能和插件安装 CLI。一键将 AI agent 技能安装到 Claude Code、Cursor、Codex、Hermes Agent、OpenCode 和 Pi。
 
-技能和插件的源码都从正式 Tag 获取。启动时只做轻量检查：读取本地技能快照、扫描已安装内容，并用 `git ls-remote` 查远端最新正式 Tag（只查不拉、不写缓存）。启动判断需要更新（或无法确认）时，进入安装面板才拉取；拉取成功一次后本进程不再拉。拉取失败时会询问是否用本地缓存继续，没有可用缓存则停止。安装或卸载结束后（无论成功与否）会重新扫描已安装内容；进入「已安装」页只展示最近一次扫描结果，不再现场检索。版本号统一不带 `v`。技能复制到目标工具，插件按宿主复制或登记。首次安装需要网络与 Git；卸载和 `--version` 不需要拉取源码。
+技能和插件的源码都从正式 Tag 获取。启动时只做轻量检查：读取本地技能快照、扫描已安装内容，并用 `git ls-remote` 查远端最新正式 Tag（只查不拉、不写缓存）。启动判断需要更新（或无法确认）时，进入安装面板才拉取；拉取成功一次后本进程不再拉。拉取失败时会询问是否用本地缓存继续，没有可用缓存则停止。安装或卸载结束后（无论成功与否）会重新扫描已安装内容；进入「已安装」页只展示最近一次扫描结果，不再现场检索。版本号统一不带 `v`。技能复制到目标工具，插件按工具复制或登记。首次安装需要网络与 Git；卸载和 `--version` 不需要拉取源码。
 
 ## 前置条件
 
@@ -28,8 +28,8 @@ luminae-helper
 
 选择「安装 / 更新 → 技能」，分四步：
 
-1. **选择内容** — 勾选要安装的技能
-2. **选择工具** — 勾选要安装到哪些 AI 工具（自动检测本机已安装的）
+1. **选择技能** — 勾选后选「下一步：选择工具」
+2. **选择工具** — 勾选要安装到哪些 AI 工具（自动检测本机已安装的），再选「下一步：预览确认」
 3. **预览确认** — 确认后执行
 4. **执行安装** — 复制文件到各工具目录，汇总结果
 
@@ -44,13 +44,13 @@ luminae-helper skill uninstall --all --tool codex
 luminae-helper skill --help
 ```
 
-`skill install` 根据最新正式 Tag 校验技能 ID，只安装到 `--tool` 指定的已安装宿主；可一次给多个 ID，或 `--all` 装全部。技能 ID 不存在时会列出当前可安装的条目。无法更新来源时命令会报错，可进入交互流程选择已验证的旧缓存。
+`skill install` 根据最新正式 Tag 校验技能 ID，只安装到 `--tool` 指定的已安装工具；可一次给多个 ID，或 `--all` 装全部。技能 ID 不存在时会列出当前可安装的条目。无法更新来源时命令会报错，可进入交互流程选择已验证的旧缓存。
 
-`skill uninstall` 完全离线，只删除该宿主上带 `managed-by: luminae-helper` 的技能；可给多个 ID，或 `--all` 卸载该宿主全部受管技能。
+`skill uninstall` 完全离线，只删除该工具上带 `managed-by: luminae-helper` 的技能；可给多个 ID，或 `--all` 卸载该工具全部受管技能。
 
 ### 安装插件
 
-运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选宿主：插件清单聚合五个宿主，选完宿主直接安装，不再二次确认。结果表列出成功、失败和不支持的组合，并写明失败原因或「该宿主清单中没有此插件」。插件清单来自技能与插件源最新正式 Tag（与技能共用同一份快照），五个插件宿主都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个宿主执行，批量请多次调用。
+运行 `luminae-helper`，选择「安装 / 更新 → 插件」，先多选插件，再选工具：插件清单聚合五个支持插件的工具，选完工具后选「开始安装」。结果表列出成功、失败和不支持的组合，并写明失败原因或「该工具清单中没有此插件」。插件清单来自技能与插件源最新正式 Tag（与技能共用同一份快照），五个支持插件的工具都提供 `ai-development-workflow`；ai-skills 发了新 Tag 后下次安装即生效，不需要升级本工具。命令行仍按单个插件、单个工具执行，批量请多次调用。
 
 ```bash
 luminae-helper plugin install ai-development-workflow --tool codex
@@ -62,9 +62,9 @@ luminae-helper plugin install my-plugin --tool claude-code --source "/path/to/lo
 luminae-helper plugin uninstall ai-development-workflow --tool cursor
 ```
 
-省略 `--tool` 时使用 Codex。`--source` 接受独立插件目录和本地来源目录，仅用于本地调试（交互流程不提供该入口）。各宿主的清单和安装方式：
+省略 `--tool` 时使用 Codex。`--source` 接受独立插件目录和本地来源目录，仅用于本地调试（交互流程不提供该入口）。各工具的清单和安装方式：
 
-| 宿主 | 清单 | 安装方式 |
+| 工具 | 清单 | 安装方式 |
 |------|------|----------|
 | Codex | `.codex-plugin/plugin.json`，优先读 `.agents/plugins/marketplace.json` | `codex plugin add`（经 marketplace 注册） |
 | Claude Code | `.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json` | `claude plugin install`（经 marketplace 注册） |
@@ -72,7 +72,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 | Hermes Agent | `plugin.yaml` | 复制到 `~/.hermes/plugins/<名字>/` 后 `hermes plugins enable` |
 | Pi | `package.json` 的 `pi` 字段 | 复制到 `~/.local/share/luminae-helper/pi-packages/<名字>/` 后 `pi install` |
 
-加载与收尾：Codex 用户在 Settings → Hooks 或 `/hooks` 审阅并信任 Hook。Claude Code 在新会话或 `/reload-plugins` 后加载，`/hooks` 查看。Cursor 需重启或 Developer: Reload Window，且组织策略要允许本地插件导入。Hermes Agent 已自动启用，新会话生效。Pi 已登记到全局设置，新会话加载扩展和技能。压缩续接依赖 Python 3.9+，各宿主分别登记统筹会话。目录宿主的安装目录由 Helper 管理（带 `.luminae-helper-plugin` 标记），不会覆盖其它来源的同名插件；卸载见下一节。
+加载与收尾：Codex 用户在 Settings → Hooks 或 `/hooks` 审阅并信任 Hook。Claude Code 在新会话或 `/reload-plugins` 后加载，`/hooks` 查看。Cursor 需重启或 Developer: Reload Window，且组织策略要允许本地插件导入。Hermes Agent 已自动启用，新会话生效。Pi 已登记到全局设置，新会话加载扩展和技能。压缩续接依赖 Python 3.9+，各工具分别登记统筹会话。目录式工具的安装目录由 Helper 管理（带 `.luminae-helper-plugin` 标记），不会覆盖其它来源的同名插件；卸载见下一节。
 
 ### 卸载
 
@@ -80,13 +80,13 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 技能：只删除带有 `managed-by: luminae-helper` 标识的文件，不会误删用户手动创建或 AI 工具自带的同名文件。
 
-插件：可多选宿主、再逐个宿主多选插件。列表只列出 Helper 管理的插件——Codex/Claude Code 查宿主配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
+插件：可多选工具、再逐个工具多选插件。列表只列出 Helper 管理的插件——Codex/Claude Code 查工具配置里 `@luminae-helper` 的记录，Cursor/Hermes Agent/Pi 要求目录带 `.luminae-helper-plugin` 标记。卸载分别调用 `codex plugin remove`、`claude plugin uninstall`、`hermes plugins remove`、`pi remove`；Cursor 没有 CLI，直接删除受管目录。其它来源的插件不会出现在列表里。
 
-安装时，目标宿主已有非本工具管理的同名技能或旧命令文件会跳过并说明冲突。更新受管旧命令时，成功安装技能后才移除旧文件。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
+安装时，目标工具已有非本工具管理的同名技能或旧命令文件会跳过并说明冲突。更新受管旧命令时，成功安装技能后才移除旧文件。识别兼容顶层旧字段和 metadata 新字段，仅接受有效 frontmatter 中的 `luminae-helper` 管理者；正文示例、其他管理者、重复键、冲突或损坏内容不认领。安装不接管软链或链接形式的 SKILL.md；发现与卸载不会顺带迁移文件。
 
 ### 查看已安装
 
-主菜单选「已安装」，或直接运行 `luminae-helper list`。按宿主列出 Helper 管理的技能与插件，插件带版本；技能源码没有版本字段，版本列显示 `—`。末尾显示最近一次技能来源快照。
+主菜单选「已安装」，或直接运行 `luminae-helper list`。按工具列出 Helper 管理的技能与插件，插件带版本；技能源码没有版本字段，版本列显示 `—`。末尾显示最近一次技能来源快照。
 
 ### 其他命令
 
@@ -113,7 +113,7 @@ luminae-helper --help       # 查看用法
 
 ## 支持的工具
 
-| 宿主 | `--tool` | 技能安装目录 |
+| 工具 | `--tool` | 技能安装目录 |
 |------|----------|----------------|
 | Claude Code | `claude-code` | `~/.claude/skills/*/` |
 | Codex | `codex` | `~/.codex/skills/*/` |

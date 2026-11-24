@@ -19,7 +19,7 @@ const hosts = {
 };
 export const PLUGIN_HOSTS = Object.keys(hosts);
 function hostConfig(host) {
-  if (!PLUGIN_HOSTS.includes(host)) throw new Error(`不支持插件宿主 ${host}。可用宿主：${PLUGIN_HOSTS.join("、")}`);
+  if (!PLUGIN_HOSTS.includes(host)) throw new Error(`该工具不支持插件：${host}。可用工具：${PLUGIN_HOSTS.join("、")}`);
   return hosts[host];
 }
 const idPart = /^[a-z0-9][a-z0-9._-]*$/i;

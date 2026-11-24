@@ -152,10 +152,11 @@ function mergeResultRows(...rowGroups) {
  * @param {{ name: string, value: string }[]} items
  * @param {string} backLabel
  */
-function withNavChoices(items, backLabel, exitLabel = "✕ 退出") {
+function withNavChoices(items, backLabel, exitLabel = "✕ 退出", actionLabel = null) {
   return [
     ...items,
     new Separator(),
+    ...(actionLabel ? [{ name: chalk.green("✓ " + actionLabel), value: "__next__" }] : []),
     { name: chalk.yellow(backLabel), value: "__back__" },
     ...(exitLabel ? [{ name: exitLabel, value: "__exit__" }] : []),
   ];
@@ -181,11 +182,10 @@ async function runCheckbox(config) {
 }
 
 // ── Step 1: Select entries (checkbox multi-select) ──
-async function stepSelectSkills(defaultChecked = true) {
+async function stepSelectSkills(defaultChecked = true, actionLabel = "下一步：选择工具") {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择技能 ━━━");
 
     const skillChoices = SKILLS.map(s => ({
       name: s.name + (s.legacyCommand ? "（旧命令）" : "") + "  -  " + s.description,
@@ -200,8 +200,9 @@ async function stepSelectSkills(defaultChecked = true) {
 
     const ans = await runCheckbox({
       message: "选择技能:",
-      choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出"),
+      choices: withNavChoices(skillChoices, "↩ 返回主菜单", "✕ 退出", actionLabel),
       loop: false,
+      requireActionRow: true,
       theme,
     });
 
@@ -221,11 +222,10 @@ async function stepSelectSkills(defaultChecked = true) {
 }
 
 // ── Step 2: Select tools (checkbox multi-select) ──
-async function stepSelectTools(installedTools) {
+async function stepSelectTools(installedTools, actionLabel = "下一步：预览确认") {
   while (true) {
     await afterPromptFlush();
     printBanner();
-    printSectionTitle("━━━ 选择目标工具 ━━━");
 
     const toolChoices = installedTools.map(t => ({
       name: t.name,
@@ -240,8 +240,9 @@ async function stepSelectTools(installedTools) {
     // 第二步：底部为返回/退出功能行（移上后回车触发）
     const ans = await runCheckbox({
       message: "选择工具:",
-      choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出"),
+      choices: withNavChoices(toolChoices, "↩ 返回上一步", "✕ 退出", actionLabel),
       loop: false,
+      requireActionRow: true,
       theme,
     });
 
@@ -477,13 +478,13 @@ async function runFlow(isUninstall, session) {
 
   while (true) {
     if (step === 1) {
-      const result = await stepSelectSkills(!isUninstall);
+      const result = await stepSelectSkills(!isUninstall, "下一步：选择工具");
       if (result === "back") return "back";
       if (result === "abort") return "abort";
       selectedSkillIds = result;
       step = 2;
     } else if (step === 2) {
-      const result = await stepSelectTools(installedTools);
+      const result = await stepSelectTools(installedTools, "下一步：预览确认");
       if (result === "back") { step = 1; continue; }
       if (result === "abort") return "abort";
       selectedToolIds = result;
@@ -586,10 +587,12 @@ async function selectKind(message) {
 }
 
 async function runInteractivePluginInstall(session) {
-  printSectionTitle("━━━ 选择插件 ━━━");
+  await afterPromptFlush();
+  publicSourceLabel = "";
+  printBanner();
   const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
   if (!tools.length) {
-    console.log(chalk.yellow(TERM_GUTTER + "没有已安装的插件宿主，请先安装 Cursor、Codex、Claude Code、Hermes Agent 或 Pi。"));
+    console.log(chalk.yellow(TERM_GUTTER + "没有可安装插件的工具，请先安装 Cursor、Codex、Claude Code、Hermes Agent 或 Pi。"));
     await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
     return "back";
   }
@@ -614,8 +617,9 @@ async function runInteractivePluginInstall(session) {
         choices: withNavChoices(catalog.map(plugin => ({
           name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
           value: plugin.name,
-        })), "↩ 返回主菜单"),
+        })), "↩ 返回主菜单", "✕ 退出", "下一步：选择工具"),
         loop: false,
+        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
@@ -633,16 +637,17 @@ async function runInteractivePluginInstall(session) {
     let hostIds = [];
     while (!hostIds.length) {
       const answer = await runCheckbox({
-        message: "选择宿主:",
-        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+        message: "选择工具:",
+        choices: withNavChoices(tools.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "开始安装"),
         loop: false,
+        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
       if (result === "back") return "back";
       if (result === "exit") return "exit";
       if (!result.length) {
-        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个宿主"));
+        console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
         await new Promise(r => setTimeout(r, 1200));
         continue;
       }
@@ -654,7 +659,7 @@ async function runInteractivePluginInstall(session) {
     for (const hostId of hostIds) {
       for (const plugin of selected) {
         if (plugin.hosts.includes(hostId)) combos.push({ hostId, name: plugin.name });
-        else skipped.push({ hostId, name: plugin.name, reason: "该宿主清单中没有此插件" });
+        else skipped.push({ hostId, name: plugin.name, reason: "该工具清单中没有此插件" });
       }
     }
 
@@ -662,7 +667,7 @@ async function runInteractivePluginInstall(session) {
       for (const item of skipped) {
         console.log(chalk.yellow(TERM_GUTTER + `跳过 ${item.name} → ${toolById.get(item.hostId).name}：${item.reason}`));
       }
-      console.log(chalk.yellow(TERM_GUTTER + "所选插件和宿主没有可安装的组合。\n"));
+      console.log(chalk.yellow(TERM_GUTTER + "所选插件和工具没有可安装的组合。\n"));
       await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
       return "back";
     }
@@ -707,7 +712,9 @@ async function runInteractivePluginInstall(session) {
 }
 
 async function runInteractivePluginUninstall() {
-  printSectionTitle("━━━ 卸载插件 ━━━");
+  await afterPromptFlush();
+  publicSourceLabel = "";
+  printBanner();
   const hosts = detectInstalledTools()
     .filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id))
     .map(tool => ({ ...tool, plugins: listInstalledPlugins(tool.id) }))
@@ -722,16 +729,17 @@ async function runInteractivePluginUninstall() {
   let hostIds = [];
   while (!hostIds.length) {
     const answer = await runCheckbox({
-      message: "选择插件宿主:",
-      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单"),
+      message: "选择工具:",
+      choices: withNavChoices(hosts.map(tool => ({ name: tool.name, value: tool.id })), "↩ 返回主菜单", "✕ 退出", "下一步：选择插件"),
       loop: false,
+      requireActionRow: true,
       theme,
     });
     const result = parseCheckboxResult(answer);
     if (result === "back") return "back";
     if (result === "exit") return "exit";
     if (!result.length) {
-      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个插件宿主"));
+      console.log(chalk.yellow(TERM_GUTTER + "请至少选择一个工具"));
       await new Promise(r => setTimeout(r, 1200));
       continue;
     }
@@ -744,13 +752,14 @@ async function runInteractivePluginUninstall() {
     let names = [];
     while (!names.length) {
       const answer = await runCheckbox({
-        message: `选择 ${host.name} 插件:`,
+        message: `选择 ${host.name} 的插件:`,
         choices: withNavChoices(host.plugins.map(plugin => ({
           name: `${plugin.name}${plugin.version ? ` · ${plugin.version}` : ""}`,
           value: plugin.name,
           checked: false,
-        })), "↩ 返回主菜单"),
+        })), "↩ 返回主菜单", "✕ 退出", hostId === hostIds[hostIds.length - 1] ? "下一步：确认卸载" : "下一步"),
         loop: false,
+        requireActionRow: true,
         theme,
       });
       const result = parseCheckboxResult(answer);
