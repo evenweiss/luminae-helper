@@ -14,7 +14,7 @@ import { PLUGIN_HOSTS, listAllManagedPlugins, listInstalledPlugins, installPlugi
  * 所有面向用户的 `console.log` / 区块标题应以此开头，避免有的顶格、有的多空格。
  */
 export const TERM_GUTTER = "  ";
-const PROMPT_PREFIX = chalk.cyan.bold("  ▌");
+const PROMPT_PREFIX = chalk.cyan.bold(" ▌");
 
 /**
  * 传给所有 @inquirer prompt 的 context。
