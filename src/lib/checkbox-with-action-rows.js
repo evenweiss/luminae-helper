@@ -279,10 +279,11 @@ export default createPrompt((config, done) => {
   if (shortcuts.invert) keys.push([shortcuts.invert, "invert"]);
   keys.push(["⏎", "提交 / 执行"]);
   const helpLine = theme.style.keysHelpTip(keys);
+  const indentedPage = page.split("\n").map((line) => " " + line).join("\n");
   const lines = [
     [prefix, message].filter(Boolean).join(" "),
     " ",
-    page,
+    indentedPage,
     " ",
     description ? theme.style.description(description) : "",
     errorMsg ? theme.style.error(errorMsg) : "",
