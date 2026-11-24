@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
-import { latestPublicTag, readCachedSource } from "../lib/public-source.js";
+import { remotePublicTag, readCachedSource } from "../lib/public-source.js";
 
 export const TERM_GUTTER = "  ";
 
@@ -106,7 +106,7 @@ export async function checkOutdated() {
   const cached = readCachedSource();
   let latestTag;
   try {
-    latestTag = await latestPublicTag();
+    latestTag = await remotePublicTag();
   } catch (error) {
     console.log(chalk.yellow(TERM_GUTTER + `⚠ 无法检查技能仓库更新：${error.message}`));
     return;

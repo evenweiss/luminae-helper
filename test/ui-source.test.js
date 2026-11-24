@@ -110,6 +110,35 @@ it.each(["back", "throw"])("releases the source when install selection ends via 
   await runInteractive();
   expect(release).toHaveBeenCalledExactlyOnceWith();
 });
+it("uses the validated local snapshot when startup tags match", async () => {
+  const cached = { root, tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  inventory.collectInstalled.mockReturnValue({ rows: [], source: { tag: "0.1.0", commit: "abcdef1234" } });
+  source.acquireCachedSource.mockResolvedValue(cached);
+  plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
+  plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
+  prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  await runInteractive();
+  expect(source.refreshPublicSource).not.toHaveBeenCalled();
+  expect(source.acquireCachedSource).toHaveBeenCalledTimes(1);
+  expect(plugins.installPlugin).toHaveBeenCalledExactlyOnceWith("workflow", undefined, "codex", root);
+  expect(cached.release).toHaveBeenCalled();
+});
+
+it("pulls at most once per session across install panels", async () => {
+  const snapshot = { root: "/fixture/snapshot", tag: "0.1.0", commit: "abcdef1234", release: vi.fn() };
+  source.refreshPublicSource.mockResolvedValue(snapshot);
+  plugins.listAllManagedPlugins.mockReturnValue([{ name: "workflow", hosts: ["codex"] }]);
+  plugins.installPlugin.mockResolvedValue({ pluginId: "workflow@luminae-helper", version: "1.2.3" });
+  prompts.checkbox.mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"])
+    .mockResolvedValueOnce(["workflow"]).mockResolvedValueOnce(["codex"]);
+  prompts.select.mockResolvedValueOnce("install").mockResolvedValueOnce("plugin")
+    .mockResolvedValueOnce("install").mockResolvedValueOnce("plugin").mockResolvedValueOnce("exit");
+  await runInteractive();
+  expect(source.refreshPublicSource).toHaveBeenCalledTimes(1);
+  expect(plugins.installPlugin).toHaveBeenCalledTimes(2);
+});
+
 it("releases a cache lease when the user declines it", async () => {
   const release = vi.fn().mockResolvedValue(undefined);
   source.refreshPublicSource.mockRejectedValue(new Error("offline"));

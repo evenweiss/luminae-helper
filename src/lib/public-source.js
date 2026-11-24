@@ -16,6 +16,10 @@ export function publicSourceOptions() {
 function optionsWithDefaults(options) {
   return { ...publicSourceOptions(), ...options };
 }
+// 对外统一使用不带 v 的版本号；git ref 仍用原始 tag。
+function normalizeTag(tag) {
+  return tag.replace(/^v/, "");
+}
 async function git(args, cwd, timeout = 30000) {
   try {
     const { stdout } = await exec("git", args, {
@@ -77,7 +81,7 @@ export function readCachedSource(options = {}) {
     const run = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim();
     if (run("rev-parse", "HEAD") !== info.commit || run("status", "--porcelain", "--untracked-files=all", "--ignored")) return null;
     if (discoverSkills(root).length === 0) return null;
-    return { root, tag: info.tag, commit: info.commit };
+    return { root, tag: normalizeTag(info.tag), commit: info.commit };
   } catch { return null; }
 }
 
@@ -103,29 +107,7 @@ export async function remotePublicTag(options = {}) {
       .filter(Boolean);
     const tag = stableTags(tags.join("\n"))[0];
     if (!tag) throw new Error("技能仓库没有正式版本 Tag");
-    return tag;
-  } catch (error) {
-    throw sourceError(error);
-  }
-}
-
-export async function latestPublicTag(options = {}) {
-  const resolved = optionsWithDefaults(options);
-  const cacheDir = resolve(resolved.cacheDir);
-  const mirror = join(cacheDir, "repository.git");
-  try {
-    await withCacheLock(cacheDir, async () => {
-      if (!existsSync(mirror)) {
-        mkdirSync(cacheDir, { recursive: true });
-        await git(["clone", "--bare", "--", resolved.repo, mirror]);
-      } else {
-        if (await git(["remote", "get-url", "origin"], mirror) !== resolved.repo) throw new Error("技能缓存来源不匹配");
-        await fetchTags(mirror);
-      }
-    });
-    const tag = stableTags(await git(["tag", "--list"], mirror))[0];
-    if (!tag) throw new Error("技能仓库没有正式版本 Tag");
-    return tag;
+    return normalizeTag(tag);
   } catch (error) {
     throw sourceError(error);
   }
@@ -159,9 +141,10 @@ async function refreshUnlocked(options) {
     await fetchTags(mirror);
   }
   if (await git(["remote", "get-url", "origin"], mirror) !== repo) throw new Error("技能缓存来源不匹配");
-  const tag = stableTags(await git(["tag", "--list"], mirror))[0];
-  if (!tag) throw new Error("技能仓库没有正式版本 Tag");
-  const commit = await git(["rev-parse", `refs/tags/${tag}^{commit}`], mirror);
+  const tagRef = stableTags(await git(["tag", "--list"], mirror))[0];
+  if (!tagRef) throw new Error("技能仓库没有正式版本 Tag");
+  const tag = normalizeTag(tagRef);
+  const commit = await git(["rev-parse", `refs/tags/${tagRef}^{commit}`], mirror);
   const snapshots = join(resolve(cacheDir), "snapshots");
   mkdirSync(snapshots, { recursive: true });
   const root = join(snapshots, commit);

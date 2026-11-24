@@ -429,13 +429,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
 }
 
 // ── Unified flow (install / uninstall) ──
-async function runFlow(isUninstall) {
-  let heldSource;
-  try { return await runFlowWithSource(isUninstall, source => { heldSource = source; }); }
-  finally { await heldSource?.release?.(); }
-}
-
-async function runFlowWithSource(isUninstall, holdSource) {
+async function runFlow(isUninstall, session) {
   const installedTools = detectInstalledTools().filter(t => t.installed);
   if (installedTools.length === 0) {
     await afterPromptFlush();
@@ -461,32 +455,14 @@ async function runFlowWithSource(isUninstall, holdSource) {
     useInstalledSkills();
     publicSourceLabel = "已安装的受管内容（离线卸载）";
   } else {
-    let source;
-    console.log(TERM_GUTTER + "正在检查技能正式版本…");
-    try {
-      source = await refreshPublicSource();
-      holdSource(source);
-      publicSourceLabel = `技能 ${source.tag} · ${source.commit}`;
-    } catch (error) {
-      console.log(chalk.yellow(TERM_GUTTER + `技能更新失败：${error.message}`));
-      const cached = await acquireCachedSource();
-      if (cached) holdSource(cached);
-      if (!cached) {
-        console.log(TERM_GUTTER + "没有可用的已验证缓存，本次安装已停止。");
-        await input({ message: "按回车返回主菜单…" }, inquirerContext);
-        return "back";
-      }
-      const choice = await pick({
-        message: `是否使用旧缓存 ${cached.tag} · ${cached.commit}？`,
-        choices: [
-          { name: "返回，不安装", value: "back" },
-          { name: "使用此缓存安装（未确认是最新版本）", value: "cache" },
-        ],
-      });
-      if (choice !== "cache") return "back";
-      source = cached;
-      publicSourceLabel = `技能旧缓存 ${source.tag} · ${source.commit}（未确认最新）`;
+    const source = await ensureSource(session);
+    if (!source) {
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      return "back";
     }
+    publicSourceLabel = session.usedFallback
+      ? `技能旧缓存 ${source.tag} · ${source.commit.slice(0, 7)}（未确认最新）`
+      : `技能 ${source.tag} · ${source.commit.slice(0, 7)}`;
     setSkillsSource(source.root);
   }
   if (SKILLS.length === 0) {
@@ -609,7 +585,7 @@ async function selectKind(message) {
   });
 }
 
-async function runInteractivePluginInstall() {
+async function runInteractivePluginInstall(session) {
   printSectionTitle("━━━ 选择插件 ━━━");
   const tools = detectInstalledTools().filter(tool => tool.installed && PLUGIN_HOSTS.includes(tool.id));
   if (!tools.length) {
@@ -619,11 +595,13 @@ async function runInteractivePluginInstall() {
   }
   const toolById = new Map(tools.map(tool => [tool.id, tool]));
   const theme = { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } };
-  let snapshot = null;
   try {
-    console.log(TERM_GUTTER + "正在检查插件正式版本…");
-    snapshot = await refreshPublicSource();
-    const catalog = listAllManagedPlugins(snapshot.root);
+    const source = await ensureSource(session);
+    if (!source) {
+      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+      return "back";
+    }
+    const catalog = listAllManagedPlugins(source.root);
     if (!catalog.length) throw new Error("技能仓库当前没有可安装的插件。");
 
     let selectedNames = [];
@@ -695,7 +673,7 @@ async function runInteractivePluginInstall() {
       const toolName = toolById.get(hostId).name;
       console.log(chalk.gray(TERM_GUTTER + `正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`));
       try {
-        const { version } = await installPlugin(name, undefined, hostId, snapshot.root);
+        const { version } = await installPlugin(name, undefined, hostId, source.root);
         ok += 1;
         rows.push({ key: `${hostId}::${name}`, toolName, skillName: name, status: `已安装${version ? ` · ${version}` : ""}`, mode: "插件", ok: true, hostId });
       } catch (error) {
@@ -713,15 +691,13 @@ async function runInteractivePluginInstall() {
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
     }
-    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${snapshot.tag}（${snapshot.commit.slice(0, 7)}）`));
+    console.log(chalk.gray(TERM_GUTTER + `插件来源：技能仓库 ${source.tag}（${source.commit.slice(0, 7)}）`));
     if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项安装失败，请手动检查。\n`));
     else if (skipped.length) console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装 ${ok} 项，${skipped.length} 项不支持已跳过。\n`));
     else console.log(chalk.green(TERM_GUTTER + `✅ 已安装 ${ok} 项\n`));
   } catch (error) {
     if (error?.name === "ExitPromptError") return "exit";
     console.log(chalk.red(TERM_GUTTER + error.message));
-  } finally {
-    if (snapshot) await snapshot.release();
   }
   await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
   return "back";
@@ -849,12 +825,72 @@ function printStartupStatus({ inventory, remoteTag, remoteError }) {
 }
 
 async function loadStartupStatus() {
-  const inventory = collectInstalled();
+  let inventory;
+  let inventoryError = null;
+  try {
+    inventory = collectInstalled();
+  } catch (error) {
+    inventoryError = error.message;
+    inventory = { rows: [], source: null };
+  }
   console.log(chalk.gray(TERM_GUTTER + "正在检查技能仓库最新版本…"));
   try {
-    return { inventory, remoteTag: await remotePublicTag() };
+    return { inventory, inventoryError, remoteTag: await remotePublicTag() };
   } catch (error) {
-    return { inventory, remoteError: error.message };
+    return { inventory, inventoryError, remoteError: error.message };
+  }
+}
+
+function needsPull({ inventory, remoteTag }) {
+  return !inventory.source || !remoteTag || remoteTag !== inventory.source.tag;
+}
+
+async function useCachedSource(session, failure) {
+  console.log(chalk.yellow(TERM_GUTTER + `拉取失败：${failure}`));
+  const cached = await acquireCachedSource();
+  if (!cached) {
+    console.log(chalk.red(TERM_GUTTER + "本地没有可用缓存，无法继续安装。"));
+    return null;
+  }
+  const choice = await pick({
+    message: `是否使用本地缓存 ${cached.tag} · ${cached.commit.slice(0, 7)} 继续安装？`,
+    choices: [
+      { name: "返回，不安装", value: "back" },
+      { name: "使用此缓存（未确认是最新版本）", value: "cache" },
+    ],
+  });
+  if (choice !== "cache") {
+    try { await cached.release?.(); } catch { /* ignore release failures */ }
+    return null;
+  }
+  session.source = cached;
+  session.pullRequired = false;
+  session.usedFallback = true;
+  return cached;
+}
+
+async function ensureSource(session) {
+  if (session.source) return session.source;
+  if (!session.pullRequired) {
+    const cached = await acquireCachedSource();
+    if (cached) {
+      session.source = cached;
+      return cached;
+    }
+    session.pullRequired = true;
+  }
+  // Git 缺失时启动检查已经失败，这里不再重复一次注定失败的拉取。
+  if (session.remoteError?.startsWith("找不到 Git")) {
+    return useCachedSource(session, session.remoteError);
+  }
+  console.log(TERM_GUTTER + "正在拉取技能仓库最新版本…");
+  try {
+    const source = await refreshPublicSource();
+    session.source = source;
+    session.pullRequired = false;
+    return source;
+  } catch (error) {
+    return useCachedSource(session, error.message);
   }
 }
 
@@ -862,58 +898,75 @@ export async function runInteractive() {
   printBanner();
   const startup = await loadStartupStatus();
   printStartupStatus(startup);
+  if (startup.inventoryError) {
+    console.log(chalk.yellow(TERM_GUTTER + `⚠ 已安装内容扫描失败：${startup.inventoryError}`));
+  }
+  const session = {
+    pullRequired: needsPull(startup),
+    source: null,
+    remoteError: startup.remoteError,
+    usedFallback: false,
+  };
   let inventoryCache = startup.inventory;
   let firstMenu = true;
   let exit = false;
 
-  while (!exit) {
-    if (!firstMenu) printBanner();
-    firstMenu = false;
+  try {
+    while (!exit) {
+      if (!firstMenu) printBanner();
+      firstMenu = false;
 
-    const action = await pick(
-      {
-        message: "选择操作:",
-        choices: [
-          { name: padChoice(" 安装 / 更新", 20), value: "install" },
-          { name: padChoice(" 卸载", 20), value: "uninstall" },
-          { name: padChoice(" 已安装", 20), value: "list" },
-          { name: padChoice(" 退出", 20), value: "exit" },
-        ],
-        theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+      const action = await pick(
+        {
+          message: "选择操作:",
+          choices: [
+            { name: padChoice(" 安装 / 更新", 20), value: "install" },
+            { name: padChoice(" 卸载", 20), value: "uninstall" },
+            { name: padChoice(" 已安装", 20), value: "list" },
+            { name: padChoice(" 退出", 20), value: "exit" },
+          ],
+          theme: { prefix: chalk.cyan(" ◆"), style: { highlight: (t) => chalk.cyan(t) } },
+        }
+      ).catch(() => "exit");
+
+      if (action === "exit") {
+        break;
       }
-    ).catch(() => "exit");
 
-    if (action === "exit") {
-      break;
-    }
+      if (action === "list") {
+        await afterPromptFlush();
+        printBanner();
+        printSectionTitle("━━━ 已安装内容 ━━━");
+        printInstalledContent(inventoryCache);
+        await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
+        continue;
+      }
 
-    if (action === "list") {
       await afterPromptFlush();
-      printBanner();
-      printSectionTitle("━━━ 已安装内容 ━━━");
-      printInstalledContent(inventoryCache);
-      await input({ message: "按回车返回主菜单…" }, inquirerContext).catch(() => {});
-      continue;
-    }
+      let result;
+      const kind = await selectKind(action === "install" ? "选择要安装的内容类型:" : "选择要卸载的内容类型:");
+      if (kind === "__back__") continue;
+      if (kind === "__exit__") break;
+      await afterPromptFlush();
+      if (action === "install") {
+        result = kind === "plugin" ? await runInteractivePluginInstall(session) : await runFlow(false, session);
+      } else {
+        result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true, session);
+      }
 
-    await afterPromptFlush();
-    let result;
-    const kind = await selectKind(action === "install" ? "选择要安装的内容类型:" : "选择要卸载的内容类型:");
-    if (kind === "__back__") continue;
-    if (kind === "__exit__") break;
-    await afterPromptFlush();
-    if (action === "install") {
-      result = kind === "plugin" ? await runInteractivePluginInstall() : await runFlow(false);
-    } else {
-      result = kind === "plugin" ? await runInteractivePluginUninstall() : await runFlow(true);
+      try {
+        inventoryCache = collectInstalled();
+      } catch (error) {
+        console.log(chalk.yellow(TERM_GUTTER + `重新扫描已安装内容失败：${error.message}`));
+      }
+      if (result === "exit" || result === "abort") {
+        exit = true;
+      }
+      await afterPromptFlush();
+      // "back" or "done" → loop continues, show main menu again
     }
-
-    inventoryCache = collectInstalled();
-    if (result === "exit" || result === "abort") {
-      exit = true;
-    }
-    await afterPromptFlush();
-    // "back" or "done" → loop continues, show main menu again
+  } finally {
+    try { await session.source?.release?.(); } catch { /* ignore release failures */ }
   }
 
   console.log(chalk.gray("\n" + TERM_GUTTER + "👋 Bye!\n"));

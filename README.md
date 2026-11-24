@@ -2,7 +2,7 @@
 
 AI 编程工具的技能和插件安装 CLI。一键将 AI agent 技能安装到 Claude Code、Cursor、Codex、Hermes Agent、OpenCode 和 Pi。
 
-技能和插件的源码都从正式 Tag 获取。启动时只做轻量检查：读取本地技能快照、扫描已安装内容，并用 `git ls-remote` 查远端最新正式 Tag（只查不拉、不写缓存）；只有安装 / 更新时才拉取源码。安装或卸载结束后（无论成功与否）会重新扫描已安装内容；进入「已安装」页只展示最近一次扫描结果，不再现场检索。技能复制到目标工具，插件按宿主复制或登记。首次安装需要网络与 Git；卸载和 `--version` 不需要拉取源码。
+技能和插件的源码都从正式 Tag 获取。启动时只做轻量检查：读取本地技能快照、扫描已安装内容，并用 `git ls-remote` 查远端最新正式 Tag（只查不拉、不写缓存）。启动判断需要更新（或无法确认）时，进入安装面板才拉取；拉取成功一次后本进程不再拉。拉取失败时会询问是否用本地缓存继续，没有可用缓存则停止。安装或卸载结束后（无论成功与否）会重新扫描已安装内容；进入「已安装」页只展示最近一次扫描结果，不再现场检索。版本号统一不带 `v`。技能复制到目标工具，插件按宿主复制或登记。首次安装需要网络与 Git；卸载和 `--version` 不需要拉取源码。
 
 ## 前置条件
 
@@ -92,7 +92,7 @@ luminae-helper plugin uninstall ai-development-workflow --tool cursor
 
 ```bash
 luminae-helper --version    # 查看版本
-luminae-helper outdated     # 检查 npm registry 与技能仓库是否有更新
+luminae-helper outdated     # 检查 npm registry 与技能仓库是否有更新（技能仓库只查不拉）
 luminae-helper --help       # 查看用法
 ```
 

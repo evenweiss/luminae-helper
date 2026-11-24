@@ -48,7 +48,7 @@ describe("public skill source", () => {
     const expected = f.commit("release"); f.git("tag", "--no-sign", "-am", "release", "v0.10.0");
     f.commit("unreleased"); f.git("tag", "1.0.0-beta.1"); f.git("tag", "notes");
     const result = await source.refreshPublicSource(f.options);
-    expect(result.tag).toBe("v0.10.0"); expect(result.commit).toBe(expected);
+    expect(result.tag).toBe("0.10.0"); expect(result.commit).toBe(expected);
     expect(readFileSync(join(result.root, "skills/demo/SKILL.md"), "utf8")).toContain("release");
     expect(readFileSync(join(result.root, "skills/demo/SKILL.md"), "utf8")).not.toContain("unreleased");
   });
@@ -61,23 +61,10 @@ describe("public skill source", () => {
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toContain("first");
     expect(source.readCachedSource(f.options).commit).toBe(second.commit);
   });
-  it("checks the remote latest tag without creating any cache", async () => {
-    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
-    expect(await source.remotePublicTag(f.options)).toBe("0.1.0");
+  it("checks the remote latest tag without creating any cache and strips a v prefix", async () => {
+    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0"); f.git("tag", "v0.2.0");
+    expect(await source.remotePublicTag(f.options)).toBe("0.2.0");
     expect(existsSync(f.options.cacheDir)).toBe(false);
-  });
-  it("reports the latest tag without creating a snapshot", async () => {
-    const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
-    expect(await source.latestPublicTag(f.options)).toBe("0.1.0");
-    f.commit("second"); f.git("tag", "0.2.0");
-    expect(await source.latestPublicTag(f.options)).toBe("0.2.0");
-    expect(existsSync(join(f.options.cacheDir, "current.json"))).toBe(false);
-    expect(existsSync(join(f.options.cacheDir, "snapshots"))).toBe(false);
-  });
-  it("summarizes a network failure when checking the latest tag", async () => {
-    const f = fixture();
-    await expect(source.latestPublicTag({ ...f.options, repo: "http://127.0.0.1:1/ai-skills.git" }))
-      .rejects.toThrow(/网络或代理不可用/);
   });
   it("reports network failure but retains an explicitly readable validated cache", async () => {
     const f = fixture(); f.commit("cached"); f.git("tag", "0.1.0");
