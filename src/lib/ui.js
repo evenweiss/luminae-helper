@@ -48,9 +48,9 @@ let publicSourceLabel = "";
 function printBanner() {
   console.clear();
   const banner = gradientString(["#4facfe", "#a855f7", "#f472b6"])("LUMINAE HELPER");
-  console.log("\n" + banner);
-  console.log(chalk.gray("AI coding tools' skills manager\n"));
-  if (publicSourceLabel) console.log(publicSourceLabel + "\n");
+  console.log("\n\t" + banner);
+  console.log(chalk.gray("\tAI coding tools' skills manager\n"));
+  if (publicSourceLabel) console.log("\t" + publicSourceLabel + "\n");
 }
 
 /**
@@ -868,14 +868,14 @@ function printStartupStatus({ inventory, inventoryError, remoteTag, remoteError 
     color = chalk.green;
   }
   if (inventoryError) {
-    console.log(chalk.yellow(`⚠ 已安装内容扫描失败：${inventoryError}`));
-    console.log(color(line) + "\n");
+    console.log(chalk.yellow(`\t⚠ 已安装内容扫描失败：${inventoryError}`));
+    console.log(color("\t" + line) + "\n");
     return;
   }
   const parts = [];
   if (skills) parts.push(`技能 ${skills}`);
   if (plugins) parts.push(`插件 ${plugins}`);
-  console.log(color(`${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`) + "\n");
+  console.log(color(`\t${line} · 已安装 ${rows.length} 项${parts.length ? `（${parts.join("、")}）` : ""}`) + "\n");
 }
 
 async function loadStartupStatus() {
