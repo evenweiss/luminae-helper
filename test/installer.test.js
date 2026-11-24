@@ -15,6 +15,7 @@ writeFileSync(join(root, "outside.txt"), "SECRET-OUTSIDE\n");
 symlinkSync(join(root, "outside.txt"), join(pkg, "skills", "demo-skill", "leak.md"));
 
 process.env.HOME = home;
+process.env.USERPROFILE = home;
 
 const { installSkillToTool, uninstallSkillFromTool } = await import("../src/lib/installer.js");
 const { SKILLS, TOOLS, setSkillsSource } = await import("../src/lib/constants.js");

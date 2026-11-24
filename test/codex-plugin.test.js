@@ -4,13 +4,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const native = vi.hoisted(() => ({ run: vi.fn(), home: "", snapshot: "" }));
+const where = vi.hoisted(() => ({ path: "C:\\fake\\tool.exe" }));
 vi.mock("../src/lib/public-source.js", () => ({
   refreshPublicSource: async () => ({ root: native.snapshot, tag: "0.1.0", commit: "a".repeat(40), release: async () => {} }),
 }));
 vi.mock("node:os", async original => ({ ...await original(), homedir: () => native.home }));
-vi.mock("node:child_process", () => ({
-  execFile: Object.assign(() => {}, { [Symbol.for("nodejs.util.promisify.custom")]: native.run }),
-}));
+vi.mock("node:child_process", () => {
+  const execFile = () => {};
+  execFile[Symbol.for("nodejs.util.promisify.custom")] = (command, args, options) =>
+    command === "where.exe" ? Promise.resolve({ stdout: `${where.path}\n` }) : native.run(command, args, options);
+  return { execFile };
+});
 const { installPlugin, listAllManagedPlugins, listInstalledPlugins, listManagedPlugins, readLocalPluginSource, runPluginCommand, uninstallPlugin }
   = await import("../src/lib/codex-plugin.js");
 
@@ -161,10 +165,10 @@ it("registers and installs for Claude Code with its own CLI and manifest", async
   reply({ outcome: "ok", pluginId: "workflow@local" });
   await expect(installPlugin("workflow", sourceDir, "claude-code")).resolves.toEqual({ pluginId: "workflow@local", version: "1.2.3" });
   expect(native.run.mock.calls.map(([bin, args]) => [bin, ...args])).toEqual([
-    ["claude", "plugin", "marketplace", "list", "--json"],
-    ["claude", "plugin", "marketplace", "add", sourceDir, "--scope", "user", "--json"],
-    ["claude", "plugin", "marketplace", "list", "--json"],
-    ["claude", "plugin", "install", "workflow@local", "--scope", "user", "--json"],
+    [process.platform === "win32" ? where.path : "claude", "plugin", "marketplace", "list", "--json"],
+    [process.platform === "win32" ? where.path : "claude", "plugin", "marketplace", "add", sourceDir, "--scope", "user", "--json"],
+    [process.platform === "win32" ? where.path : "claude", "plugin", "marketplace", "list", "--json"],
+    [process.platform === "win32" ? where.path : "claude", "plugin", "install", "workflow@local", "--scope", "user", "--json"],
   ]);
 });
 

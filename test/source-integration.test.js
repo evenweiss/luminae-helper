@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const root = mkdtempSync(join(tmpdir(), "source-integration-"));
 process.env.HOME = join(root, "home");
+process.env.USERPROFILE = join(root, "home");
 const { SKILLS, TOOLS, setSkillsSource, discoverInstalledSkills } = await import("../src/lib/constants.js");
 const { installSkillToTool, uninstallSkillFromTool } = await import("../src/lib/installer.js");
 afterAll(() => rmSync(root, { recursive: true, force: true }));

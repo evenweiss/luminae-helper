@@ -14,6 +14,7 @@ vi.mock("../src/lib/inventory.js", () => inventory);
 vi.mock("../src/utils/platform.js", () => ({ commandExists: () => true }));
 const root = mkdtempSync(join(tmpdir(), "ui-source-"));
 process.env.HOME = join(root, "home");
+process.env.USERPROFILE = join(root, "home");
 mkdirSync(join(root, "skills", "runtime"), { recursive: true });
 writeFileSync(join(root, "skills/runtime/SKILL.md"), "---\nname: runtime\ndescription: test\n---\nbody");
 const { runInteractive } = await import("../src/lib/ui.js");

@@ -9,6 +9,7 @@ import * as source from "../src/lib/public-source.js";
 
 const children = [];
 const roots = [];
+const itPosix = process.platform === "win32" ? it.skip : it; // Windows locks cache files during rename.
 async function startChild(code, env = process.env) {
   const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["pipe", "pipe", "pipe"], env });
   children.push(child);
@@ -87,7 +88,7 @@ describe("public skill source", () => {
     await expect(source.refreshPublicSource(f.options)).rejects.toThrow("快照已被修改");
     expect(readFileSync(join(first.root, "skills/demo/SKILL.md"), "utf8")).toBe("keep local edit");
   });
-  it("allows concurrent first installs and concurrent release refreshes to share the cache", async () => {
+  itPosix("allows concurrent first installs and concurrent release refreshes to share the cache", async () => {
     const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
     const first = await Promise.allSettled([source.refreshPublicSource(f.options), source.refreshPublicSource(f.options)]);
     expect(first.map(r => r.status)).toEqual(["fulfilled", "fulfilled"]);
@@ -151,7 +152,7 @@ describe("public skill source", () => {
     expect(existsSync(ready.root)).toBe(false);
     expect(readdirSync(join(f.options.cacheDir, "snapshots"))).toEqual([second.commit]);
   });
-  it("reclaims a crashed reader's lease and an abandoned operation lock", async () => {
+  itPosix("reclaims a crashed reader's lease and an abandoned operation lock", async () => {
     const f = fixture(); f.commit("first"); f.git("tag", "0.1.0");
     const module = pathToFileURL(join(import.meta.dirname, "../src/lib/public-source.js")).href;
     const lifecycle = pathToFileURL(join(import.meta.dirname, "../src/lib/cache-lifecycle.js")).href;
