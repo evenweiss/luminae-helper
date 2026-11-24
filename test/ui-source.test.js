@@ -191,7 +191,7 @@ it("uninstalls several plugins across hosts in one pass", async () => {
   expect(plugins.uninstallPlugin.mock.calls).toEqual([["a", "codex"], ["b", "codex"], ["c", "claude-code"]]);
   const output = console.log.mock.calls.flat().join("\n");
   expect(output).toContain("待卸载内容");
-  expect(output).toMatch(/正在卸载 2\/3：b/);
+  expect(output).not.toContain("正在卸载");
   expect(output).toContain("boom");
 });
 

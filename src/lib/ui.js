@@ -17,6 +17,16 @@ export const TERM_GUTTER = "  ";
 const PROMPT_PREFIX = chalk.cyan.bold(" ▌");
 const PROMPT_THEME = { prefix: PROMPT_PREFIX, style: { highlight: (t) => chalk.cyan(t) } };
 const SELECT_THEME = { prefix: chalk.cyan.bold("▌"), style: { highlight: (t) => chalk.cyan(t) } };
+const canAnimateProgress = Boolean(process.stdout.isTTY);
+
+/** 单行进度：覆盖上一行，避免批量操作留下整屏「正在…」。 */
+function showProgress(text) {
+  if (canAnimateProgress) process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray(text)}`);
+}
+
+function clearProgress() {
+  if (canAnimateProgress) process.stdout.write("\r\x1b[2K");
+}
 
 /**
  * 传给所有 @inquirer prompt 的 context。
@@ -333,6 +343,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
   for (const toolId of tids) {
     const tool = TOOLS.find(t => t.id === toolId);
     if (!tool) {
+      clearProgress();
       console.log(chalk.gray(TERM_GUTTER + "- 工具 " + toolId + " 未识别，跳过"));
       continue;
     }
@@ -341,6 +352,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
       current += 1;
       const skill = SKILLS.find(s => s.id === skillId);
       if (!skill) {
+        clearProgress();
         console.log(chalk.gray(TERM_GUTTER + "- 技能 " + skillId + " 未识别，跳过"));
         continue;
       }
@@ -349,7 +361,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
       // 如果是重试模式，只执行之前失败的组合
       if (failedKeys && !failedKeys.has(key)) continue;
 
-      console.log(chalk.gray(TERM_GUTTER + `正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`));
+      showProgress(`正在${isUninstall ? "卸载" : "安装"} ${current}/${total}：${skill.name} → ${tool.name}`);
 
       const target = skill.installTargets?.find(tgt => tgt.toolId === toolId);
       if (!target) {
@@ -424,6 +436,7 @@ async function stepExecute(skillIds, toolIds, isUninstall, failedKeys = null) {
     }
   }
 
+  clearProgress();
   console.log();
   if (allSuccess) {
     console.log(chalk.green(TERM_GUTTER + `✅ ${isUninstall ? "已卸载" : "已安装"} ${resultRows.length} 项\n`));
@@ -705,7 +718,7 @@ async function runInteractivePluginInstall(session) {
     for (let i = 0; i < combos.length; i += 1) {
       const { hostId, name } = combos[i];
       const toolName = toolById.get(hostId).name;
-      console.log(chalk.gray(TERM_GUTTER + `正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`));
+      showProgress(`正在安装 ${i + 1}/${combos.length}：${name} → ${toolName}`);
       try {
         const { version } = await installPlugin(name, undefined, hostId, source.root);
         ok += 1;
@@ -721,6 +734,8 @@ async function runInteractivePluginInstall(session) {
         skillName: item.name, status: chalk.yellow("不支持"), mode: "插件", reason: item.reason,
       });
     }
+    clearProgress();
+    console.log();
     printResultTable("安装结果", rows);
     for (const hostId of new Set(rows.filter(row => row.ok).map(row => row.hostId))) {
       console.log(pluginHostNote(hostId));
@@ -829,7 +844,7 @@ async function runInteractivePluginUninstall() {
     const host = hosts.find(tool => tool.id === hostId);
     for (const name of names) {
       current += 1;
-      console.log(chalk.gray(TERM_GUTTER + `正在卸载 ${current}/${total}：${name} → ${host.name}`));
+      showProgress(`正在卸载 ${current}/${total}：${name} → ${host.name}`);
       try {
         await uninstallPlugin(name, hostId);
         ok += 1;
@@ -837,10 +852,13 @@ async function runInteractivePluginUninstall() {
       } catch (error) {
         failed += 1;
         rows.push({ toolName: host.name, skillName: name, status: chalk.red("失败"), mode: "插件", reason: error.message });
+        clearProgress();
         console.log(chalk.red(TERM_GUTTER + error.message));
       }
     }
   }
+  clearProgress();
+  console.log();
   printResultTable("卸载结果", rows);
   if (failed) console.log(chalk.red(TERM_GUTTER + `❌ ${failed} 项卸载失败，请手动检查。\n`));
   else console.log(chalk.green(TERM_GUTTER + `✅ 已卸载 ${ok} 项\n`));
@@ -940,13 +958,7 @@ async function ensureSource(session) {
     return useCachedSource(session, session.remoteError);
   }
   // 进度只占一行，拉取结束立即擦掉；获取结果由下一屏的「技能 x.y.z」标题表达。
-  const canAnimate = Boolean(process.stdout.isTTY);
-  if (canAnimate) {
-    process.stdout.write(`\r\x1b[2K${TERM_GUTTER}${chalk.gray("正在获取技能与插件…")}`);
-  }
-  const clearProgress = () => {
-    if (canAnimate) process.stdout.write("\r\x1b[2K");
-  };
+  showProgress("正在获取技能与插件…");
   try {
     const source = await refreshPublicSource();
     clearProgress();
